@@ -1,10 +1,10 @@
 use core::panic;
+use std::fmt::Display;
 
-use ascii::{AsAsciiStr, AsciiChar, AsciiStr, AsciiString, Chars};
-const EMPTY_ASCII_STR: &AsciiStr = AsciiStr::from_ascii(b"").unwrap();
-#[derive(Debug, PartialEq, Clone)]
+use ascii::{AsciiChar, AsciiStr};
+#[derive(Debug, PartialEq, Clone,Copy)]
 #[allow(dead_code)]
-enum TokenType {
+pub enum TokenType {
     // Single-character tokens
     LeftParen,
     RightParen,
@@ -77,7 +77,7 @@ impl TokenType {
         }
     }
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug,Copy)]
 pub struct Token<'a> {
     token_type: TokenType,
     lexeme: &'a AsciiStr,
@@ -92,10 +92,26 @@ impl<'a> Token<'a> {
             line,
         }
     }
+    pub fn get_type(&self)->TokenType{self.token_type}
+    pub fn match_token(&self, token_type: &TokenType) -> bool {
+        self.token_type == *token_type
+    }
+    pub fn matches_token(&self, token_types: &[TokenType]) -> bool {
+        for x in token_types.iter() {
+            if *x == self.token_type {
+                return true;
+            }
+        }
+        false
+    }
 }
-
+impl Display for Token<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.lexeme.to_string())
+    }
+}
 #[derive(Debug, Clone)]
-struct Scanner<'a> {
+pub struct Scanner<'a> {
     source: &'a AsciiStr,
     tokens: Vec<Token<'a>>,
     line: usize,
@@ -118,8 +134,11 @@ impl<'a> Scanner<'a> {
             self.start = self.current;
             self.scan_token();
         }
-        self.tokens
-            .push(Token::new(TokenType::Eof, EMPTY_ASCII_STR, self.line));
+        self.tokens.push(Token::new(
+            TokenType::Eof,
+            AsciiStr::from_ascii(b"").unwrap(),
+            self.line,
+        ));
         self.tokens
     }
     fn is_at_end(&self) -> bool {
@@ -175,6 +194,7 @@ impl<'a> Scanner<'a> {
                 self.add_token(token_type);
             }
             '/' => {
+                //cahecking for comments
                 if self.match_later('/') {
                     while self.peek() != '\n' && !self.is_at_end() {
                         self.advance();
@@ -195,12 +215,11 @@ impl<'a> Scanner<'a> {
             _ => {
                 if c.is_digit(10) {
                     self.token_digit();
-                }
-                if c.is_ascii_alphabetic() {
+                } else if c.is_ascii_alphabetic() {
                     self.token_identifier();
                 }
 
-                panic!("Unexpected error occured while parsing")
+                //else {panic!("Unexpected error occured while parsing")}
             }
         }
     }
@@ -265,9 +284,11 @@ impl<'a> Scanner<'a> {
             self.advance();
         }
         if self.peek() == '.' && self.peek_next().is_digit(10) {
+            self.advance();
             while self.peek().is_digit(10) {
                 self.advance();
             }
         }
+        self.add_token(TokenType::Number);
     }
 }
