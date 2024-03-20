@@ -1,0 +1,154 @@
+use std::{fmt::{  Debug, Display}, ops::{Add, Div, Mul, Sub}};
+
+use crate::token::{Token, TokenType};
+#[derive(Debug,Clone)]
+enum ExprValue{
+    Str(String),
+    Boolean(bool),
+    Number(f64),
+}
+impl Add for ExprValue{
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        use ExprValue::*;
+        match (self,rhs) {
+            (Number(x),Number(y))=>Number(x+y),
+            (Number(x),Boolean(y))=>Number(x+Into::<f64>::into(y)),
+            (Boolean(x),Number(y))=>Number(Into::<f64>::into(x)+y),
+            (Boolean(x),Boolean(y))=>{
+                let var_name = Into::<f64>::into(x)+Into::<f64>::into(y);
+                Number(var_name)
+            },
+            (Str(x),Str(y))=>Str(x+&y),
+            _=>panic!("Type mismatched.")
+        }
+    }
+}
+impl Sub for ExprValue{
+    type Output=Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        use ExprValue::*;
+        match (self,rhs){
+            (Number(x),Number(y))=>Number(x-y),
+            (Number(x),Boolean(y))=>Number(x-Into::<f64>::into(y)),
+            (Boolean(x),Number(y))=>Number(Into::<f64>::into(x)-y),
+            (Boolean(x),Boolean(y))=>{
+                let var_name = Into::<f64>::into(x)-Into::<f64>::into(y);
+                Number(var_name)
+            },
+            _=>panic!("INvalid operator.")
+        }
+    }
+}
+impl Mul for ExprValue{
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self::Output {
+        use ExprValue::*;
+        match (self,rhs){
+            (Number(x),Number(y))=>Number(x*y),
+            (Number(x),Boolean(y))=>Number(x*Into::<f64>::into(y)),
+            (Boolean(x),Number(y))=>Number(Into::<f64>::into(x)*y),
+            (Boolean(x),Boolean(y))=>{
+                let var_name = Into::<i64>::into(x)*Into::<i64>::into(y);
+                Number(var_name)
+            },
+            _=>panic!("Invalid mul operation.")
+ 
+        }
+    }
+}
+impl Div for ExprValue{
+    fn div(self, rhs: Self) -> Self::Output {
+        use ExprValue::*;
+        match (self,rhs) {
+            (Number(x),Number(y))=>Number(x/y),
+        }
+    }
+}
+pub trait Expr:Debug+Display{
+    fn evaluate(&self)->ExprValue;
+}
+#[derive(Debug)]
+pub struct BinaryOp<'a>{
+    left:Box<dyn Expr+'a>,
+    operator:Token<'a>,
+    right:Box<dyn Expr+'a>
+}
+
+impl<'a> BinaryOp<'a> {
+    pub fn new(left: Box<dyn Expr+'a>, operator: Token<'a>, right: Box<dyn Expr+'a>) -> Self {
+        Self { left, operator, right }
+    }
+}
+#[derive(Debug)]
+pub struct Grouping<'a>{
+    expression:Box<dyn Expr+'a>
+}
+
+impl<'a> Grouping<'a> {
+    pub fn new(expression: Box<dyn Expr+'a>) -> Self {
+        Self { expression }
+    }
+}
+#[derive(Debug,Clone)]
+pub struct Literal<'a>{
+    token:Token<'a>,
+}
+
+impl<'a> Literal<'a> {
+    pub fn new(token: Token<'a>) -> Self {
+        Self { token }
+    }
+
+    fn token_type(&self) -> TokenType {
+        self.token.get_type()
+    }
+}
+#[derive(Debug)]
+pub struct Unary<'a>{
+    operator:Token<'a>,
+    right:Box<dyn Expr+'a>
+}
+
+impl<'a> Unary<'a> {
+    pub fn new(operator: Token<'a>, right: Box<dyn Expr+'a>) -> Self {
+        Self { operator, right }
+    }
+}
+impl Display for BinaryOp<'_>{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"({}{} {})",self.operator.to_string(),self.left.to_string(),self.right.to_string())
+    }
+}
+
+impl Expr for BinaryOp<'_>{}
+impl Expr for Grouping<'_>{}
+impl Display for Grouping<'_>{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"(Group {})",self.expression.to_string())
+    }
+}
+impl Display for Literal<'_>{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{}",self.token.to_string())
+    }
+}
+impl Expr for Literal<'_>{
+    fn evaluate(&self)->ExprValue {
+        use TokenType::{String,Number,True,False};
+        match self.token_type() {
+            String=>ExprValue::Str(self.to_string()),
+            Number=>ExprValue::Number(self.to_string().try_into().unwrap()),
+            True=>ExprValue::Boolean(true),
+            False=>ExprValue::Boolean(false),
+            _=>panic!("Unexpected value,wanted boolean,number or string"),
+        }
+    }
+}
+impl Display for Unary<'_>{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!{f,"({}{})",self.operator.to_string(),self.right.to_string()}
+    }
+}
+impl Expr for Unary<'_>{}
+

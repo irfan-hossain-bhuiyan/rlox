@@ -85,7 +85,7 @@ pub struct Token<'a> {
 }
 
 impl<'a> Token<'a> {
-    fn new(token_type: TokenType, lexeme: &'a AsciiStr, line: usize) -> Self {
+    fn new(token_type: TokenType, lexeme: &'a AsciiStr, line: usize,) -> Self {
         Self {
             token_type,
             lexeme,
@@ -104,6 +104,7 @@ impl<'a> Token<'a> {
         }
         false
     }
+    pub fn as_str(&self)->&str{self.lexeme.as_str()}
 }
 impl Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -178,18 +179,18 @@ impl<'a> Scanner<'a> {
 
             '<' => {
                 let token_type = if self.match_later('=') {
-                    TokenType::GreaterEqual
+                    TokenType::LessEqual
                 } else {
-                    TokenType::Equal
+                    TokenType::Less
                 };
                 self.add_token(token_type);
             }
 
             '>' => {
                 let token_type = if self.match_later('=') {
-                    TokenType::LessEqual
+                    TokenType::GreaterEqual
                 } else {
-                    TokenType::Equal
+                    TokenType::Greater
                 };
                 self.add_token(token_type);
             }

@@ -1,3 +1,3 @@
-fn main() {
-
+fn main(){
+ println!("It's working");
 }

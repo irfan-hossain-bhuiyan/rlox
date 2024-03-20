@@ -14,7 +14,3 @@ version = "0.1.0"
 dependencies = [
  "ascii",
 ]
-
-[[package]]
-name = "rtest"
-version = "0.1.0"
