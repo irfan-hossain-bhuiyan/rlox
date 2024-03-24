@@ -1,5 +1,9 @@
 use crate::{
-    ast::{BinaryOp, Expr, Grouping, Literal, Unary},
+    ast::{
+        expression::{BinaryOp, Expr, Grouping, Literal, Unary, Variable},
+        statement::{Expression, Print, Statements, Stmt, Var},
+    },
+    lox_object::{Object, Values},
     token::{Token, TokenType},
 };
 #[derive(Debug, Clone)]
@@ -14,6 +18,7 @@ pub struct Parser<'a, 'b: 'a> {
 /// factor-> unary ("*"|"/" unary)*
 /// unary->  ("!"|"-" unary) | primary
 /// primary-> Literal | "(" expression ")"
+/// LIteral-> Values | Variable
 impl<'a, 'b: 'a> From<&'a [Token<'b>]> for Parser<'a, 'b> {
     fn from(value: &'a [Token<'b>]) -> Self {
         Self::new(value)
@@ -26,8 +31,12 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
     }
     /// parse the syntax tree from the token stream.
     /// As for now it just parse expression.
-    pub fn parse(&mut self) -> Box<dyn Expr + 'b> {
-        self.expression()
+    pub fn parse(&mut self) -> Statements<'b> {
+        let mut statements: Vec<Box<dyn Stmt>> = Vec::new();
+        while !self.is_at_end() {
+            statements.push(self.declaration());
+        }
+        return statements.into();
     }
     /// expression->equility
     fn expression(&mut self) -> Box<dyn Expr + 'b> {
@@ -35,7 +44,7 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
     }
     /// equiltiy->comparasion ("!="|"!" comparasion)*
     fn equility(&mut self) -> Box<dyn Expr + 'b> {
-        use TokenType::{EqualEqual, BangEqual};
+        use TokenType::{BangEqual, EqualEqual};
         let mut expr: Box<dyn Expr + 'b> = self.comparision();
         while self.match_withs(&[EqualEqual, BangEqual]) {
             let operator: Token<'_> = self.previous_token();
@@ -89,19 +98,28 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
     }
     /// primary-> Literal | "(" expression ")"
     fn primary(&mut self) -> Box<dyn Expr + 'b> {
-        use TokenType::{False, LeftParen, Nil, Number, RightParen, String, True};
+        use TokenType::{False, LeftParen, Nil, Number, RightParen, String, True,Identifier};
         if self.match_withs(&[True, False, Nil, Number, String]) {
             let literal = self.previous_token();
             return Box::new(Literal::new(literal));
+        }
+        if self.match_withs(&[Identifier]){
+            return Box::new(Variable::new(self.previous_token()));
         }
         if self.match_withs(&[LeftParen]) {
             let expr: Box<dyn Expr + 'b> = self.expression();
             if self.match_withs(&[RightParen]) {
                 return Box::new(Grouping::new(expr));
             }
-            panic!("There is no right pranthetics in the right side of the expression {}",expr);
+            panic!(
+                "There is no right pranthetics in the right side of the expression {}",
+                expr
+            );
         }
-        panic!("The token is {:?} \nThere should be a expression here.",self.current_token());
+        panic!(
+            "The token is {:?} \nThere should be a expression here.",
+            self.current_token()
+        );
     }
     fn match_withs(&mut self, token_types: &[TokenType]) -> bool {
         let Some(current_token) = self.current_token() else {
@@ -127,5 +145,48 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
     }
     fn is_at_end(&self) -> bool {
         self.source.len() <= self.index
+    }
+    fn consume(&mut self, token_type: TokenType, panic_msg: &str) -> Token<'b> {
+        if self.is_at_end() || !self.match_withs(&[token_type]) {
+            panic!("{}", panic_msg);
+        }
+        self.previous_token()
+    }
+
+    fn statement(&mut self) -> Box<dyn Stmt + 'b> {
+        if self.match_withs(&[TokenType::Print]) {
+            return self.print_statement();
+        }
+        self.expression_statement()
+    }
+
+    fn print_statement(&mut self) -> Box<dyn Stmt + 'b> {
+        let expr = self.expression();
+        self.consume(TokenType::Semicolon, "Expected ; after statement.");
+        Box::new(Print::new(expr))
+    }
+
+    fn expression_statement(&mut self) -> Box<dyn Stmt + 'b> {
+        let expr = self.expression();
+        self.consume(TokenType::Semicolon, "Expected ; after statment.");
+        return Box::new(Expression::new(expr));
+    }
+
+    fn declaration(&mut self) -> Box<dyn Stmt + 'b> {
+        if self.match_withs(&[TokenType::Var]) {
+            return self.var_declaration();
+        }
+        self.statement()
+    }
+
+    fn var_declaration(&mut self) -> Box<dyn Stmt + 'b> {
+        let name = self.consume(TokenType::Identifier, "expected variable name.");
+        let initilizer = if self.match_withs(&[TokenType::Equal]) {
+            self.expression()
+        } else {
+            Into::<Object>::into(Values::Null).into()
+        };
+        self.consume(TokenType::Semicolon, "Expected ; after statement.");
+        Box::new(Var::new(name, initilizer))
     }
 }

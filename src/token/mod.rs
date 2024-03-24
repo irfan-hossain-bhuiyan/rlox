@@ -79,6 +79,7 @@ impl TokenType {
 }
 #[derive(Clone, Debug,Copy)]
 pub struct Token<'a> {
+
     token_type: TokenType,
     lexeme: &'a AsciiStr,
     line: usize,
@@ -220,7 +221,7 @@ impl<'a> Scanner<'a> {
                     self.token_identifier();
                 }
 
-                //else {panic!("Unexpected error occured while parsing")}
+                else {panic!("Unexpected error occured while parsing")}
             }
         }
     }

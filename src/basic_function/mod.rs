@@ -1,4 +1,4 @@
-use std::{fmt::Display, io, os::unix::process};
+use std::{fmt::Display, io};
 
 pub fn to_string(x: Result<impl Display, impl Display>) -> String {
     match x {
