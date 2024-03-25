@@ -1,7 +1,6 @@
 use std::{error::Error, fmt::{Debug, Display}};
 
-use crate::{
-    ast::expression::Expr, interpreter::environment::Environment,
+use crate::{ast::expression::Expr, interpreter::environment::Environment,
     token::Token,
 };
 ///program → declaration* EOF ;
@@ -103,7 +102,8 @@ impl Stmt for Expression<'_> {
 }
 impl Stmt for Print<'_> {
     fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>> {
-        println!("{}", self.expression.evaluate_to_val(env)?);
+        let value=self.expression.evaluate_to_val(env)?;
+        env.writeln(&value.to_string())?;
         Ok(())
     }
 }

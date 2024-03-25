@@ -1,3 +1,4 @@
+use std::{error::Error, fmt::Display, mem::take};
 
 use crate::{
     ast::{
@@ -11,6 +12,40 @@ use crate::{
 pub struct Parser<'a, 'b: 'a> {
     source: &'a [Token<'b>],
     index: usize,
+    errors: Vec<ParserError<'b>>,
+}
+#[derive(Debug, Clone, Copy)]
+enum ParserErrorType {
+    MissingSemicolon,
+    InvalidAssignment,
+}
+impl ParserErrorType {
+    fn to_str(&self) -> &'static str {
+        match self{
+            Self::MissingSemicolon=>"Semicolon (;) missing after statement.",
+            Self::InvalidAssignment=>"Right side of the assignment is not a variable."
+        }
+    }
+}
+#[derive(Debug, Clone, Copy)]
+pub struct ParserError<'a> {
+    pos: Token<'a>,
+    error_type: ParserErrorType,
+}
+impl Error for ParserError<'_>{}
+pub type ParserErrors<'b>=Vec<ParserError<'b>>;
+type Result<'b>=std::result::Result<Statements<'b>,ParserErrors<'b>>;
+impl Display for ParserError<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let pos = self.pos.span();
+        let error_str = self.error_type.to_str();
+        write!(f, "Error in {}\n Error:{}", pos, error_str)
+    }
+}
+impl<'a> ParserError<'a> {
+    fn new(pos: Token<'a>, error_type: ParserErrorType) -> Self {
+        Self { pos, error_type }
+    }
 }
 /// expression->assignment
 /// assignment → IDENTIFIER "=" assignment  | equality ;
@@ -29,11 +64,15 @@ impl<'a, 'b: 'a> From<&'a [Token<'b>]> for Parser<'a, 'b> {
 
 impl<'a, 'b: 'b> Parser<'a, 'b> {
     pub fn new(source: &'a [Token<'b>]) -> Self {
-        Self { source, index: 0 }
+        Self {
+            source,
+            index: 0,
+            errors: Vec::new(),
+        }
     }
     /// parse the syntax tree from the token stream.
     /// As for now it just parse expression.
-    pub fn parse(&mut self) -> Statements<'b> {
+    pub fn parse(&mut self) -> Result<'b> {
         let mut statements: Vec<Box<dyn Stmt>> = Vec::new();
         while !self.is_at_end() {
             if self.match_withs(&[TokenType::Eof]) {
@@ -41,7 +80,10 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
             }
             statements.push(self.declaration());
         }
-        return statements.into();
+        match self.get_errors(){
+            Some(x)=>Err(x),
+            None=>Ok(statements.into()),
+        }
     }
     /// expression->equilitypar
     fn expression(&mut self) -> Box<dyn Expr<'b> + 'b> {
@@ -51,7 +93,7 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         let expr = self.equility();
         if self.match_withs(&[TokenType::Equal]) {
             let right = self.assignment();
-            let name=expr.is_var().unwrap();
+            let name = expr.is_var().unwrap();
             return Box::new(Assign::new(name, right));
         }
         expr
@@ -160,9 +202,9 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
     fn is_at_end(&self) -> bool {
         self.source.len() <= self.index
     }
-    fn consume(&mut self, token_type: TokenType, panic_msg: &str) -> Token<'b> {
+    fn consume(&mut self, token_type: TokenType, error_type: ParserErrorType) -> Token<'b> {
         if self.is_at_end() || !self.match_withs(&[token_type]) {
-            panic!("{}", panic_msg);
+            self.error(error_type);
         }
         self.previous_token()
     }
@@ -176,13 +218,13 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
 
     fn print_statement(&mut self) -> Box<dyn Stmt + 'b> {
         let expr = self.expression();
-        self.consume(TokenType::Semicolon, "Expected ; after statement.");
+        self.consume(TokenType::Semicolon, ParserErrorType::MissingSemicolon);
         Box::new(Print::new(expr))
     }
 
     fn expression_statement(&mut self) -> Box<dyn Stmt + 'b> {
         let expr = self.expression();
-        self.consume(TokenType::Semicolon, "Expected ; after statment.");
+        self.consume(TokenType::Semicolon, ParserErrorType::MissingSemicolon);
         return Box::new(Expression::new(expr));
     }
 
@@ -194,13 +236,23 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
     }
 
     fn var_declaration(&mut self) -> Box<dyn Stmt + 'b> {
-        let name = self.consume(TokenType::Identifier, "expected variable name.");
+        let name = self.consume(TokenType::Identifier, ParserErrorType::InvalidAssignment);
         let initilizer = if self.match_withs(&[TokenType::Equal]) {
             self.expression()
         } else {
             Into::<Object>::into(Values::Null).into()
         };
-        self.consume(TokenType::Semicolon, "Expected ; after statement.");
+        self.consume(TokenType::Semicolon, ParserErrorType::MissingSemicolon);
         Box::new(Var::new(name, initilizer))
+    }
+
+    fn error(&mut self, error_type: ParserErrorType) {
+        self.errors
+            .push(ParserError::new(self.previous_token(), error_type));
+    }
+
+    fn get_errors(&mut self) -> Option<ParserErrors<'b>> {
+        if self.errors.is_empty(){return None;}
+        Some(take(&mut self.errors))
     }
 }

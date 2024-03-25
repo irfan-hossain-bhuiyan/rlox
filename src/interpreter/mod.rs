@@ -1,18 +1,24 @@
+#[macro_use]
 pub mod environment;
 
-use std::ops::Deref;
+use std::{io::Write, ops::Deref};
 
 use environment::Environment;
 
-use crate::{ast::statement::Stmt, lox_error::emit_runtime_error};
-#[derive(Default,Debug)]
-pub struct Interpreter{
-    env:Environment,
+use crate::{ast::statement::Stmt, lox_error::emit_error};
+#[derive(Debug)]
+pub struct Interpreter<'input>{
+    env:Environment<'input>,
 }
-impl Interpreter{
+impl<'a> Interpreter<'a>{
+    pub fn new(stdout:&'a mut dyn Write)->Self{
+        Self{
+            env:Environment::new(stdout),
+        }
+    }
     pub fn interpret(&mut self, statement:&dyn Stmt){
         if let Err(x)=statement.execute(&mut self.env){
-            emit_runtime_error(x.deref());
+            emit_error(x.deref());
         }
     }
 }

@@ -1,12 +1,24 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug, io::Write};
 
 use crate::lox_object::Values;
 
-#[derive(Debug,Default)]
-pub struct Environment{
+pub struct Environment<'a>{
     values:HashMap<String,Values>,
+    stdout:&'a mut dyn Write,    
 }
-impl Environment{
+
+impl Debug for Environment<'_>{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"Environment{{values:{:?}}}",self.values)
+    }
+}
+impl<'a> Environment<'a>{
+    pub(super) fn new(stdout:&'a mut dyn Write)->Self{
+        Self{
+            values:HashMap::new(),
+            stdout,
+        }
+    }
     pub fn get(&self,name:&str)->Option<&Values>{
         self.values.get(name)
     }
@@ -20,6 +32,15 @@ impl Environment{
         }
     }
     pub fn contains(&self,name:&str)->bool{
-        self.contains(name)
+        self.values.contains_key(name)
     }
+    pub fn writeln(&mut self, output:&str) -> Result<(), std::io::Error> {
+        writeln!(self.stdout,"{}",output)
+    }
+}
+#[macro_export]
+macro_rules! write_env {
+    ($name:expr,$($t:tt)*) => {
+        $name.write(& format!($($t)*))
+    };
 }

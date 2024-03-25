@@ -2,7 +2,7 @@ use core::panic;
 use std::fmt::Display;
 
 use ascii::{AsciiChar, AsciiStr};
-#[derive(Debug, PartialEq, Clone,Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 #[allow(dead_code)]
 pub enum TokenType {
     // Single-character tokens
@@ -77,23 +77,26 @@ impl TokenType {
         }
     }
 }
-#[derive(Clone, Debug,Copy)]
+#[derive(Clone, Debug, Copy)]
 pub struct Token<'a> {
-
     token_type: TokenType,
     lexeme: &'a AsciiStr,
     line: usize,
+    coloum: usize,
 }
 
 impl<'a> Token<'a> {
-    fn new(token_type: TokenType, lexeme: &'a AsciiStr, line: usize,) -> Self {
+    fn new(token_type: TokenType, lexeme: &'a AsciiStr, line: usize, coloum: usize) -> Self {
         Self {
             token_type,
             lexeme,
             line,
+            coloum,
         }
     }
-    pub fn get_type(&self)->TokenType{self.token_type}
+    pub fn get_type(&self) -> TokenType {
+        self.token_type
+    }
     pub fn match_token(&self, token_type: &TokenType) -> bool {
         self.token_type == *token_type
     }
@@ -105,7 +108,13 @@ impl<'a> Token<'a> {
         }
         false
     }
-    pub fn as_str(self)->&'a str{self.lexeme.as_str()}
+    pub fn as_str(self) -> &'a str {
+        self.lexeme.as_str()
+    }
+
+    pub(crate) fn span(&self) -> String {
+        format!("{}:{}", self.line, self.coloum)
+    }
 }
 impl Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -117,6 +126,7 @@ pub struct Scanner<'a> {
     source: &'a AsciiStr,
     tokens: Vec<Token<'a>>,
     line: usize,
+    coloum: usize,
     current: usize,
     start: usize,
 }
@@ -129,6 +139,7 @@ impl<'a> Scanner<'a> {
             current: 0,
             start: 0,
             line: 0,
+            coloum: 0,
         }
     }
     pub fn scan_tokens(mut self) -> Vec<Token<'a>> {
@@ -140,6 +151,7 @@ impl<'a> Scanner<'a> {
             TokenType::Eof,
             AsciiStr::from_ascii(b"").unwrap(),
             self.line,
+            self.coloum,
         ));
         self.tokens
     }
@@ -209,19 +221,16 @@ impl<'a> Scanner<'a> {
             ' ' => {}
             '\r' => {}
             '\t' => {}
-            '\n' => {
-                self.line += 1;
-            }
-            // string,literal,number
+            '\n' => self.token_line(),            // string,literal,number
             '"' => self.token_string(),
             _ => {
                 if c.is_digit(10) {
                     self.token_digit();
                 } else if c.is_ascii_alphabetic() {
                     self.token_identifier();
+                } else {
+                    panic!("Unexpected error occured while parsing")
                 }
-
-                else {panic!("Unexpected error occured while parsing")}
             }
         }
     }
@@ -250,6 +259,7 @@ impl<'a> Scanner<'a> {
     fn advance(&mut self) -> AsciiChar {
         let ans = self.source[self.current];
         self.current += 1;
+        self.coloum += 1;
         ans
     }
     fn add_token(&mut self, token_type: TokenType) {
@@ -257,6 +267,7 @@ impl<'a> Scanner<'a> {
             token_type,
             &self.source[self.start..self.current],
             self.line,
+            self.coloum,
         ));
     }
     fn match_later(&mut self, ch: char) -> bool {
@@ -292,5 +303,10 @@ impl<'a> Scanner<'a> {
             }
         }
         self.add_token(TokenType::Number);
+    }
+
+    fn token_line(&mut self) {
+        self.coloum=0;
+        self.line+=1;
     }
 }
