@@ -44,22 +44,20 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         return statements.into();
     }
     /// expression->equilitypar
-    fn expression(&mut self) -> Box<dyn Expr + 'b> {
+    fn expression(&mut self) -> Box<dyn Expr<'b> + 'b> {
         self.assignment()
     }
-    fn assignment(&mut self) -> Box<dyn Expr + 'b> {
-        let expr: Box<dyn Expr + 'b> = self.equility();
+    fn assignment(&mut self) -> Box<dyn Expr<'b> + 'b> {
+        let expr = self.equility();
         if self.match_withs(&[TokenType::Equal]) {
             let right = self.assignment();
-            if expr.is_var().is_none() {
-                panic!("invalid assignment.Left side of the expression is not valid.");
-            };
-            return Box::new(Assign::new(expr, right));
+            let name=expr.is_var().unwrap();
+            return Box::new(Assign::new(name, right));
         }
         expr
     }
     /// equiltiy->comparasion ("!="|"!" comparasion)*
-    fn equility(&mut self) -> Box<dyn Expr + 'b> {
+    fn equility(&mut self) -> Box<dyn Expr<'b> + 'b> {
         use TokenType::{BangEqual, EqualEqual};
         let mut expr: Box<dyn Expr + 'b> = self.comparision();
         while self.match_withs(&[EqualEqual, BangEqual]) {
@@ -70,7 +68,7 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         expr
     }
     /// comparasion -> term ("<"|"<="|">"|">=" term)*
-    fn comparision(&mut self) -> Box<dyn Expr + 'b> {
+    fn comparision(&mut self) -> Box<dyn Expr<'b> + 'b> {
         use TokenType::{Greater, GreaterEqual, Less, LessEqual};
         let mut expr = self.term();
         while self.match_withs(&[Greater, GreaterEqual, Less, LessEqual]) {
@@ -81,7 +79,7 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         expr
     }
     /// term ->factor ("+"|"-" factor)*
-    fn term(&mut self) -> Box<dyn Expr + 'b> {
+    fn term(&mut self) -> Box<dyn Expr<'b> + 'b> {
         use TokenType::{Minus, Plus};
         let mut expr: Box<dyn Expr + 'b> = self.factor();
         while self.match_withs(&[Plus, Minus]) {
@@ -92,7 +90,7 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         expr
     }
     /// factor-> unary ("*"|"/" unary)*
-    fn factor(&mut self) -> Box<dyn Expr + 'b> {
+    fn factor(&mut self) -> Box<dyn Expr<'b> + 'b> {
         use TokenType::{Slash, Star};
         let mut expr: Box<dyn Expr + 'b> = self.unary();
         while self.match_withs(&[Slash, Star]) {
@@ -103,7 +101,7 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         expr
     }
     /// unary->  ("!"|"-" unary) | primary
-    fn unary(&mut self) -> Box<dyn Expr + 'b> {
+    fn unary(&mut self) -> Box<dyn Expr<'b> + 'b> {
         use TokenType::{Bang, Minus};
         if self.match_withs(&[Bang, Minus]) {
             let operator: Token<'_> = self.previous_token();
@@ -113,7 +111,7 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         self.primary()
     }
     /// primary-> Literal | "(" expression ")"
-    fn primary(&mut self) -> Box<dyn Expr + 'b> {
+    fn primary(&mut self) -> Box<dyn Expr<'b> + 'b> {
         use TokenType::{False, Identifier, LeftParen, Nil, Number, RightParen, String, True};
         if self.match_withs(&[True, False, Nil, Number, String]) {
             let literal = self.previous_token();

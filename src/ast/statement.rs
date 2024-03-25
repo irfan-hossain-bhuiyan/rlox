@@ -44,12 +44,12 @@ impl Stmt for Statements<'_>{
 }
 #[derive(Debug)]
 pub struct Expression<'a> {
-    expression: Box<dyn Expr + 'a>,
+    expression: Box<dyn Expr<'a> + 'a>,
 }
 #[derive(Debug)]
 pub struct Var<'a> {
     name: Token<'a>,
-    initializer: Box<dyn Expr + 'a>,
+    initializer: Box<dyn Expr<'a> + 'a>,
 }
 impl Display for Var<'_>{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -58,7 +58,7 @@ impl Display for Var<'_>{
 }
 
 impl<'a> Var<'a> {
-    pub fn new(name: Token<'a>, initializer: Box<dyn Expr + 'a>) -> Self {
+    pub fn new(name: Token<'a>, initializer: Box<dyn Expr<'a> + 'a>) -> Self {
         Self { name, initializer }
     }
 }
@@ -70,7 +70,7 @@ impl Stmt for Var<'_> {
     }
 }
 impl<'a> Expression<'a> {
-    pub fn new(expression: Box<dyn Expr + 'a>) -> Self {
+    pub fn new(expression: Box<dyn Expr<'a> + 'a>) -> Self {
         Self { expression }
     }
 }
@@ -81,11 +81,11 @@ impl Display for Expression<'_>{
 }
 #[derive(Debug)]
 pub struct Print<'a> {
-    expression: Box<dyn Expr + 'a>,
+    expression: Box<dyn Expr<'a> + 'a>,
 }
 
 impl<'a> Print<'a> {
-    pub fn new(expression: Box<dyn Expr + 'a>) -> Self {
+    pub fn new(expression: Box<dyn Expr<'a> + 'a>) -> Self {
         Self { expression }
     }
 }

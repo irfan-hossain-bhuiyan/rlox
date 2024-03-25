@@ -5,75 +5,72 @@ use std::{
     fmt::{Debug, Display},
     result::Result,
 };
-pub trait Expr: Display + Debug {
+pub trait Expr<'Tok>: Display + Debug {
     fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String>;
     fn evaluate_to_val(&self, env: &mut Environment) -> Result<Values, String> {
         self.evaluate_to_obj(env)?.into_value(env)
     }
-    fn is_var(&self) -> Option<Token<'_>> {
+    fn is_var(& self) -> Option<Token<'Tok>> {
         None
     }
 }
 #[derive(Debug)]
 pub struct BinaryOp<'a> {
-    left: Box<dyn Expr + 'a>,
+    left: Box<dyn Expr<'a> + 'a>,
     operator: Token<'a>,
-    right: Box<dyn Expr + 'a>,
+    right: Box<dyn Expr<'a> + 'a>,
 }
 #[derive(Debug)]
 pub struct Variable<'a> {
-    name: Token<'a>,
+    name:  Token<'a>,
 }
 impl Display for Variable<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.name, f)
     }
 }
-impl Expr for Variable<'_> {
+impl<'a> Expr<'a> for Variable<'a> {
     fn evaluate_to_obj(&self, _env: &mut Environment) -> Result<Object, String> {
         Ok(Object::Var {
             name: self.name.to_string(),
         })
     }
-    fn is_var(&self) -> Option<Token> {
+    fn is_var(&self) -> Option<Token<'a>> {
         Some(self.name)
     }
 }
 impl<'a> Variable<'a> {
-    pub fn new(name: Token<'a>) -> Self {
+    pub fn new(name:Token<'a>) -> Self {
         Variable { name }
     }
 }
 #[derive(Debug)]
-pub struct Assign<'a> {
-    name: Box<dyn Expr + 'a>,
-    value: Box<dyn Expr + 'a>,
+pub struct Assign<'a,'b:'a> {
+    name: Token<'b>,
+    value: Box<dyn Expr<'b> + 'a>,
 }
 
-impl<'a> Assign<'a> {
-    pub fn new(name: Box<dyn Expr + 'a>, value: Box<dyn Expr + 'a>) -> Self {
+impl<'a,'b:'a> Assign<'a,'b> {
+    pub fn new(name: Token<'b>, value: Box<dyn Expr<'b> + 'a>) -> Self {
         Self { name, value }
     }
 }
-impl Display for Assign<'_> {
+impl Display for Assign<'_,'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} = {}", self.name, self.value)
     }
 }
-impl Expr for Assign<'_> {
+impl<'a,'b:'a> Expr<'b> for Assign<'a,'b> {
     fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
         let value = self.value.evaluate_to_val(env)?;
-        let Some(name) = self.name.is_var() else {
-            return Err("Left side of the assignment is not a variable.".to_owned());
-        };
-        env.redefine(name.as_str(), value)?;
+        env.redefine(self.name.as_str(), value)?;
         Ok(Values::Null.into())
     }
 }
 
 #[derive(Debug)]
 pub struct Value(Object);
-impl From<Object> for Box<dyn Expr> {
+impl From<Object> for Box<dyn Expr<'_>> {
     fn from(value: Object) -> Self {
         Box::new(Value(value))
     }
@@ -88,13 +85,13 @@ impl Display for Value {
         Display::fmt(&self.0, f)
     }
 }
-impl Expr for Value {
+impl Expr<'_> for Value {
     fn evaluate_to_obj(&self, _env: &mut Environment) -> Result<Object, String> {
         Ok(self.0.clone())
     }
 }
 impl<'a> BinaryOp<'a> {
-    pub fn new(left: Box<dyn Expr + 'a>, operator: Token<'a>, right: Box<dyn Expr + 'a>) -> Self {
+    pub fn new(left: Box<dyn Expr<'a> + 'a>, operator: Token<'a>, right: Box<dyn Expr<'a> + 'a>) -> Self {
         Self {
             left,
             operator,
@@ -104,11 +101,11 @@ impl<'a> BinaryOp<'a> {
 }
 #[derive(Debug)]
 pub struct Grouping<'a> {
-    expression: Box<dyn Expr + 'a>,
+    expression: Box<dyn Expr<'a> + 'a>,
 }
 
 impl<'a> Grouping<'a> {
-    pub fn new(expression: Box<dyn Expr + 'a>) -> Self {
+    pub fn new(expression: Box<dyn Expr<'a> + 'a>) -> Self {
         Self { expression }
     }
 }
@@ -128,11 +125,11 @@ impl<'a> Literal<'a> {
 #[derive(Debug)]
 pub struct Unary<'a> {
     operator: Token<'a>,
-    right: Box<dyn Expr + 'a>,
+    right: Box<dyn Expr<'a> + 'a>,
 }
 
 impl<'a> Unary<'a> {
-    pub fn new(operator: Token<'a>, right: Box<dyn Expr + 'a>) -> Self {
+    pub fn new(operator: Token<'a>, right: Box<dyn Expr<'a> + 'a>) -> Self {
         Self { operator, right }
     }
 }
@@ -148,7 +145,7 @@ impl Display for BinaryOp<'_> {
     }
 }
 
-impl Expr for BinaryOp<'_> {
+impl Expr<'_> for BinaryOp<'_> {
     fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
         let left = self.left.evaluate_to_val(env)?;
         let right = self.right.evaluate_to_val(env)?;
@@ -171,7 +168,7 @@ impl Expr for BinaryOp<'_> {
         .map(|x| x.into())
     }
 }
-impl Expr for Grouping<'_> {
+impl Expr<'_> for Grouping<'_> {
     fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
         self.expression.evaluate_to_obj(env)
     }
@@ -186,7 +183,7 @@ impl Display for Literal<'_> {
         write!(f, "{}", self.token.to_string())
     }
 }
-impl Expr for Literal<'_> {
+impl Expr<'_> for Literal<'_> {
     fn evaluate_to_obj(&self, _env: &mut Environment) -> Result<Object, String> {
         use TokenType::{False, Number, String, True};
         let ans = match self.token_type() {
@@ -204,7 +201,7 @@ impl Display for Unary<'_> {
         write! {f,"({}{})",self.operator.to_string(),self.right.to_string()}
     }
 }
-impl Expr for Unary<'_> {
+impl Expr<'_> for Unary<'_> {
     fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
         let right = self.right.evaluate_to_val(env)?;
         use TokenType::*;
