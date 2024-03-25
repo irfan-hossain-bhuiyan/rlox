@@ -5,12 +5,12 @@ use std::{
     fmt::{Debug, Display},
     result::Result,
 };
-pub trait Expr<'Tok>: Display + Debug {
+pub trait Expr<'tok>: Display + Debug {
     fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String>;
     fn evaluate_to_val(&self, env: &mut Environment) -> Result<Values, String> {
         self.evaluate_to_obj(env)?.into_value(env)
     }
-    fn is_var(& self) -> Option<Token<'Tok>> {
+    fn is_var(& self) -> Option<Token<'tok>> {
         None
     }
 }
@@ -45,22 +45,22 @@ impl<'a> Variable<'a> {
     }
 }
 #[derive(Debug)]
-pub struct Assign<'a,'b:'a> {
+pub struct Assign<'b> {
     name: Token<'b>,
-    value: Box<dyn Expr<'b> + 'a>,
+    value: Box<dyn Expr<'b> + 'b>,
 }
 
-impl<'a,'b:'a> Assign<'a,'b> {
-    pub fn new(name: Token<'b>, value: Box<dyn Expr<'b> + 'a>) -> Self {
+impl<'b> Assign<'b> {
+    pub fn new(name: Token<'b>, value: Box<dyn Expr<'b> + 'b>) -> Self {
         Self { name, value }
     }
 }
-impl Display for Assign<'_,'_> {
+impl Display for Assign<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} = {}", self.name, self.value)
     }
 }
-impl<'a,'b:'a> Expr<'b> for Assign<'a,'b> {
+impl<'b> Expr<'b> for Assign<'b> {
     fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
         let value = self.value.evaluate_to_val(env)?;
         env.redefine(self.name.as_str(), value)?;
