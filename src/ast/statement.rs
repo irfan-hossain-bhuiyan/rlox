@@ -97,13 +97,13 @@ impl Display for Print<'_>{
 
 impl Stmt for Expression<'_> {
     fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>> {
-        self.expression.evaluate_to_obj(env)?;
+        self.expression.evaluate_to_val(env)?;
         Ok(())
     }
 }
 impl Stmt for Print<'_> {
     fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>> {
-        println!("{}", self.expression.evaluate_to_obj(env)?);
+        println!("{}", self.expression.evaluate_to_val(env)?);
         Ok(())
     }
 }

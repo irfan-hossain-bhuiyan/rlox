@@ -9,7 +9,7 @@ pub fn to_string(x: Result<impl Display, impl Display>) -> String {
 pub fn print(x: Result<impl Display, impl Display>) {
     println!("{}", to_string(x));
 }
-pub fn repl(f: impl Fn(&str)) {
+pub fn repl(mut f: impl FnMut(&str)) {
     loop {
     let mut x: String = String::new();
          if let Err(x)=io::stdin().read_line(&mut x){

@@ -6,9 +6,12 @@ use std::{
     result::Result,
 };
 pub trait Expr: Display + Debug {
-    fn evaluate_to_obj(&self,env:&mut Environment) -> Result<Object, String>;
-    fn evaluate_to_val(&self,env:&mut Environment) -> Result<Values, String>{
+    fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String>;
+    fn evaluate_to_val(&self, env: &mut Environment) -> Result<Values, String> {
         self.evaluate_to_obj(env)?.into_value(env)
+    }
+    fn is_var(&self) -> Option<Token<'_>> {
+        None
     }
 }
 #[derive(Debug)]
@@ -26,11 +29,14 @@ impl Display for Variable<'_> {
         Display::fmt(&self.name, f)
     }
 }
-impl<'a> Expr for Variable<'a> {
-    fn evaluate_to_obj(&self,_env:&mut Environment) -> Result<Object, String> {
-        Ok(Object::Var{
+impl Expr for Variable<'_> {
+    fn evaluate_to_obj(&self, _env: &mut Environment) -> Result<Object, String> {
+        Ok(Object::Var {
             name: self.name.to_string(),
         })
+    }
+    fn is_var(&self) -> Option<Token> {
+        Some(self.name)
     }
 }
 impl<'a> Variable<'a> {
@@ -39,20 +45,28 @@ impl<'a> Variable<'a> {
     }
 }
 #[derive(Debug)]
-struct Assign {
-    name:String,
-    value:Box<dyn Expr>,
+pub struct Assign<'a> {
+    name: Box<dyn Expr + 'a>,
+    value: Box<dyn Expr + 'a>,
 }
-impl Display for Assign{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,"{} = {}",self.name,self.value)
+
+impl<'a> Assign<'a> {
+    pub fn new(name: Box<dyn Expr + 'a>, value: Box<dyn Expr + 'a>) -> Self {
+        Self { name, value }
     }
 }
-impl Expr for Assign{
-    fn evaluate_to_obj(&self,env:&mut Environment) -> Result<Object, String> {
-        if !env.contains(&self.name){return Err("Variable not found.".to_owned())}
-        let value=self.value.evaluate_to_val(env)?;
-        env.redefine(&self.name,value)?;
+impl Display for Assign<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} = {}", self.name, self.value)
+    }
+}
+impl Expr for Assign<'_> {
+    fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
+        let value = self.value.evaluate_to_val(env)?;
+        let Some(name) = self.name.is_var() else {
+            return Err("Left side of the assignment is not a variable.".to_owned());
+        };
+        env.redefine(name.as_str(), value)?;
         Ok(Values::Null.into())
     }
 }
@@ -75,7 +89,7 @@ impl Display for Value {
     }
 }
 impl Expr for Value {
-    fn evaluate_to_obj(&self,_env:&mut Environment) -> Result<Object, String> {
+    fn evaluate_to_obj(&self, _env: &mut Environment) -> Result<Object, String> {
         Ok(self.0.clone())
     }
 }
@@ -135,7 +149,7 @@ impl Display for BinaryOp<'_> {
 }
 
 impl Expr for BinaryOp<'_> {
-    fn evaluate_to_obj(&self,env:&mut Environment) -> Result<Object, String> {
+    fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
         let left = self.left.evaluate_to_val(env)?;
         let right = self.right.evaluate_to_val(env)?;
         use TokenType::{
@@ -153,11 +167,12 @@ impl Expr for BinaryOp<'_> {
             EqualEqual => Ok(left.eq(&right)),
             BangEqual => Ok(left.neq(&right)),
             _ => Err("mismatched type sin binary operation.".into()),
-        }.map(|x|x.into())
+        }
+        .map(|x| x.into())
     }
 }
 impl Expr for Grouping<'_> {
-    fn evaluate_to_obj(&self,env:&mut Environment) -> Result<Object, String> {
+    fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
         self.expression.evaluate_to_obj(env)
     }
 }
@@ -172,7 +187,7 @@ impl Display for Literal<'_> {
     }
 }
 impl Expr for Literal<'_> {
-    fn evaluate_to_obj(&self,_env:&mut Environment) -> Result<Object, String> {
+    fn evaluate_to_obj(&self, _env: &mut Environment) -> Result<Object, String> {
         use TokenType::{False, Number, String, True};
         let ans = match self.token_type() {
             String => Values::Str(self.to_string()),
@@ -190,13 +205,14 @@ impl Display for Unary<'_> {
     }
 }
 impl Expr for Unary<'_> {
-    fn evaluate_to_obj(&self,env:&mut Environment) -> Result<Object, String> {
+    fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
         let right = self.right.evaluate_to_val(env)?;
         use TokenType::*;
         match self.operator.get_type() {
             Minus => right.negative(),
             Bang => right.is_truthy().not(),
             _ => Err("Other operator is not allowed".into()),
-        }.map(|x|x.into())
+        }
+        .map(|x| x.into())
     }
 }

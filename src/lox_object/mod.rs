@@ -24,8 +24,8 @@ impl Object{
 impl Display for Object{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Object::Value(x)=>Display::fmt(&self, f),
-            Object::Var { name }=>Display::fmt(&self, f),
+            Object::Value(x)=>Display::fmt(x, f),
+            Object::Var { name }=>Display::fmt(name, f),
         }
     }
 }

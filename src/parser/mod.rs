@@ -1,6 +1,7 @@
+
 use crate::{
     ast::{
-        expression::{BinaryOp, Expr, Grouping, Literal, Unary, Variable},
+        expression::{Assign, BinaryOp, Expr, Grouping, Literal, Unary, Variable},
         statement::{Expression, Print, Statements, Stmt, Var},
     },
     lox_object::{Object, Values},
@@ -11,7 +12,8 @@ pub struct Parser<'a, 'b: 'a> {
     source: &'a [Token<'b>],
     index: usize,
 }
-/// expression->equility
+/// expression->assignment
+/// assignment → IDENTIFIER "=" assignment  | equality ;
 /// equiltiy->comparasion ("!="|"==" comparasion)*
 /// comparasion -> term ("<"|"<="|">"|">=" term)*
 /// term ->factor ("+"|"-" factor)*
@@ -25,7 +27,7 @@ impl<'a, 'b: 'a> From<&'a [Token<'b>]> for Parser<'a, 'b> {
     }
 }
 
-impl<'a, 'b: 'a> Parser<'a, 'b> {
+impl<'a, 'b: 'b> Parser<'a, 'b> {
     pub fn new(source: &'a [Token<'b>]) -> Self {
         Self { source, index: 0 }
     }
@@ -34,13 +36,27 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
     pub fn parse(&mut self) -> Statements<'b> {
         let mut statements: Vec<Box<dyn Stmt>> = Vec::new();
         while !self.is_at_end() {
+            if self.match_withs(&[TokenType::Eof]) {
+                break;
+            }
             statements.push(self.declaration());
         }
         return statements.into();
     }
-    /// expression->equility
+    /// expression->equilitypar
     fn expression(&mut self) -> Box<dyn Expr + 'b> {
-        self.equility()
+        self.assignment()
+    }
+    fn assignment(&mut self) -> Box<dyn Expr + 'b> {
+        let expr: Box<dyn Expr + 'b> = self.equility();
+        if self.match_withs(&[TokenType::Equal]) {
+            let right = self.assignment();
+            if expr.is_var().is_none() {
+                panic!("invalid assignment.Left side of the expression is not valid.");
+            };
+            return Box::new(Assign::new(expr, right));
+        }
+        expr
     }
     /// equiltiy->comparasion ("!="|"!" comparasion)*
     fn equility(&mut self) -> Box<dyn Expr + 'b> {
@@ -67,7 +83,7 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
     /// term ->factor ("+"|"-" factor)*
     fn term(&mut self) -> Box<dyn Expr + 'b> {
         use TokenType::{Minus, Plus};
-        let mut expr: Box<dyn Expr> = self.factor();
+        let mut expr: Box<dyn Expr + 'b> = self.factor();
         while self.match_withs(&[Plus, Minus]) {
             let operator = self.previous_token();
             let right = self.factor();
@@ -98,12 +114,12 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
     }
     /// primary-> Literal | "(" expression ")"
     fn primary(&mut self) -> Box<dyn Expr + 'b> {
-        use TokenType::{False, LeftParen, Nil, Number, RightParen, String, True,Identifier};
+        use TokenType::{False, Identifier, LeftParen, Nil, Number, RightParen, String, True};
         if self.match_withs(&[True, False, Nil, Number, String]) {
             let literal = self.previous_token();
             return Box::new(Literal::new(literal));
         }
-        if self.match_withs(&[Identifier]){
+        if self.match_withs(&[Identifier]) {
             return Box::new(Variable::new(self.previous_token()));
         }
         if self.match_withs(&[LeftParen]) {

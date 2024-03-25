@@ -1,16 +1,17 @@
 use std::str::FromStr;
 
 use ascii::AsciiString;
-use rlox::{basic_function::{to_string,repl}, parser::Parser, token::Scanner};
+use rlox::{basic_function::repl, interpreter::Interpreter, parser::Parser, token::Scanner};
 fn main() {
-    repl(eval_expr);   
+    let mut interpreter=Interpreter::default();
+    repl(|x|eval_expr(x,&mut interpreter));   
 }
-fn eval_expr(input: &str) {
+fn eval_expr(input: &str,interpreter:&mut Interpreter) {
     let Ok(input) = AsciiString::from_str(input) else {
         eprintln!("Can't convert to asciistring");
         return;
     };
     let token_tree = Scanner::new(&input).scan_tokens();
-    let value = Parser::new(&token_tree).parse().evaluate();
-    println!("Value is {}", to_string(value));
+    let ast = Parser::new(&token_tree).parse();
+    interpreter.interpret(&ast);
 }

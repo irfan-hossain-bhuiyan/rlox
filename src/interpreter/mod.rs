@@ -4,17 +4,15 @@ use std::ops::Deref;
 
 use environment::Environment;
 
-use crate::{ast::statement::Stmt, lox_error};
+use crate::{ast::statement::Stmt, lox_error::emit_runtime_error};
 #[derive(Default,Debug)]
-struct Interpreter{
+pub struct Interpreter{
     env:Environment,
 }
 impl Interpreter{
-    fn interpret(&mut self, statements:Vec<Box<dyn Stmt>>){
-        for x in statements{
-            if let Err(x)=x.execute(&mut self.env){
-                lox_error::emit_runtime_error(x.deref());
-            }
+    pub fn interpret(&mut self, statement:&dyn Stmt){
+        if let Err(x)=statement.execute(&mut self.env){
+            emit_runtime_error(x.deref());
         }
     }
 }
