@@ -1,7 +1,6 @@
-use core::panic;
-use std::fmt::Display;
+use std::{error::Error, fmt::Display, mem::take};
 
-use ascii::{AsciiChar, AsciiStr};
+use ascii::{AsAsciiStr, AsciiChar, AsciiStr};
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[allow(dead_code)]
 pub enum TokenType {
@@ -50,7 +49,7 @@ pub enum TokenType {
     True,
     Var,
     While,
-
+    TokenError,
     // End of file
     Eof,
 }
@@ -84,7 +83,6 @@ pub struct Token<'a> {
     line: usize,
     coloum: usize,
 }
-
 impl<'a> Token<'a> {
     fn new(token_type: TokenType, lexeme: &'a AsciiStr, line: usize, coloum: usize) -> Self {
         Self {
@@ -92,6 +90,14 @@ impl<'a> Token<'a> {
             lexeme,
             line,
             coloum,
+        }
+    }
+    pub fn err_token()->Self{
+        Self{
+            token_type:TokenType::TokenError,
+            lexeme:unsafe{"".as_ascii_str_unchecked()},
+            line:0,
+            coloum:0,
         }
     }
     pub fn get_type(&self) -> TokenType {
@@ -121,6 +127,39 @@ impl Display for Token<'_> {
         write!(f, "{}", self.lexeme.to_string())
     }
 }
+#[derive(Debug, Clone, Copy)]
+enum TokenizationErrorType {
+    UnIdentifiedLetter(char),
+    UnFinishedString,
+}
+impl TokenizationErrorType {
+    fn as_str(&self) -> String {
+        match self {
+           Self::UnIdentifiedLetter(x)=>format!("Character not identified:{}",x),
+           Self::UnFinishedString=>format!("You didn't end the string."),
+        }
+    }
+}
+#[derive(Debug, Clone, Copy)]
+pub struct TokenizationError {
+    line: usize,
+    coloum: usize,
+    error_type: TokenizationErrorType,
+}
+impl Display for TokenizationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "line/coloum:{}:{}\n  Error:{}",
+            self.line,
+            self.coloum,
+            self.error_type.as_str()
+        )
+    }
+}
+impl Error for TokenizationError{}
+type Tokens<'a> = Vec<Token<'a>>;
+pub type TokenizationErrors = Vec<TokenizationError>;
 #[derive(Debug, Clone)]
 pub struct Scanner<'a> {
     source: &'a AsciiStr,
@@ -129,8 +168,9 @@ pub struct Scanner<'a> {
     coloum: usize,
     current: usize,
     start: usize,
+    errors: TokenizationErrors,
 }
-
+type Result<'a>=std::result::Result<Tokens<'a>,TokenizationErrors>;
 impl<'a> Scanner<'a> {
     pub fn new(source: &'a AsciiStr) -> Self {
         Self {
@@ -140,9 +180,10 @@ impl<'a> Scanner<'a> {
             start: 0,
             line: 0,
             coloum: 0,
+            errors: Vec::new(),
         }
     }
-    pub fn scan_tokens(mut self) -> Vec<Token<'a>> {
+    pub fn scan_tokens(mut self) -> Result<'a> {
         while !self.is_at_end() {
             self.start = self.current;
             self.scan_token();
@@ -153,7 +194,24 @@ impl<'a> Scanner<'a> {
             self.line,
             self.coloum,
         ));
-        self.tokens
+        match self.get_error(){
+            Some(x)=>Err(x),
+            None=>Ok(self.tokens),
+        }
+    }
+    fn throw_error(&mut self, error_type: TokenizationErrorType) {
+        let error = TokenizationError {
+            line: self.line,
+            coloum: self.coloum,
+            error_type,
+        };
+        self.errors.push(error);
+    }
+    fn get_error(&mut self)->Option<TokenizationErrors>{
+        if self.errors.is_empty(){
+            return None;
+        }
+        Some(take(&mut self.errors))
     }
     fn is_at_end(&self) -> bool {
         self.source.len() <= self.current
@@ -221,15 +279,15 @@ impl<'a> Scanner<'a> {
             ' ' => {}
             '\r' => {}
             '\t' => {}
-            '\n' => self.token_line(),            // string,literal,number
+            '\n' => self.token_line(), // string,literal,number
             '"' => self.token_string(),
-            _ => {
+            x => {
                 if c.is_digit(10) {
                     self.token_digit();
                 } else if c.is_ascii_alphabetic() {
                     self.token_identifier();
                 } else {
-                    panic!("Unexpected error occured while parsing")
+                    self.throw_error(TokenizationErrorType::UnIdentifiedLetter(x));
                 }
             }
         }
@@ -242,7 +300,7 @@ impl<'a> Scanner<'a> {
             self.advance();
         }
         if self.is_at_end() {
-            panic!("String not finished.")
+            self.throw_error(TokenizationErrorType::UnFinishedString);
         }
         self.advance();
         self.add_token(TokenType::String);
@@ -306,7 +364,7 @@ impl<'a> Scanner<'a> {
     }
 
     fn token_line(&mut self) {
-        self.coloum=0;
-        self.line+=1;
+        self.coloum = 0;
+        self.line += 1;
     }
 }

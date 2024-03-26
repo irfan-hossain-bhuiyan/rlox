@@ -2,7 +2,7 @@ use std::{error::Error, fmt::Display, mem::take};
 
 use crate::{
     ast::{
-        expression::{Assign, BinaryOp, Expr, Grouping, Literal, Unary, Variable},
+        expression::{Assign, BinaryOp, Expr, Grouping, Literal, Unary, Value, Variable},
         statement::{Expression, Print, Statements, Stmt, Var},
     },
     lox_object::{Object, Values},
@@ -18,12 +18,18 @@ pub struct Parser<'a, 'b: 'a> {
 enum ParserErrorType {
     MissingSemicolon,
     InvalidAssignment,
+    MissingRightParen,
+    MissingValue,
+    MissingVariable,
 }
 impl ParserErrorType {
     fn to_str(&self) -> &'static str {
-        match self{
-            Self::MissingSemicolon=>"Semicolon (;) missing after statement.",
-            Self::InvalidAssignment=>"Right side of the assignment is not a variable."
+        match self {
+            Self::MissingSemicolon => "Semicolon (;) missing after statement.",
+            Self::InvalidAssignment => "Right side of the assignment is not a variable.",
+            Self::MissingValue => "There should be a value here.",
+            Self::MissingRightParen => "Right Parenthethis is missing",
+            Self::MissingVariable=>"Variable not found",
         }
     }
 }
@@ -32,9 +38,9 @@ pub struct ParserError<'a> {
     pos: Token<'a>,
     error_type: ParserErrorType,
 }
-impl Error for ParserError<'_>{}
-pub type ParserErrors<'b>=Vec<ParserError<'b>>;
-type Result<'b>=std::result::Result<Statements<'b>,ParserErrors<'b>>;
+impl Error for ParserError<'_> {}
+pub type ParserErrors<'b> = Vec<ParserError<'b>>;
+type Result<'b> = std::result::Result<Statements<'b>, ParserErrors<'b>>;
 impl Display for ParserError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let pos = self.pos.span();
@@ -80,9 +86,9 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
             }
             statements.push(self.declaration());
         }
-        match self.get_errors(){
-            Some(x)=>Err(x),
-            None=>Ok(statements.into()),
+        match self.get_errors() {
+            Some(x) => Err(x),
+            None => Ok(statements.into()),
         }
     }
     /// expression->equilitypar
@@ -93,7 +99,10 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         let expr = self.equility();
         if self.match_withs(&[TokenType::Equal]) {
             let right = self.assignment();
-            let name = expr.is_var().unwrap();
+            let name = expr.is_var().unwrap_or_else(|| {
+                self.error(ParserErrorType::MissingVariable);
+                Token::err_token()
+            });
             return Box::new(Assign::new(name, right));
         }
         expr
@@ -164,18 +173,13 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         }
         if self.match_withs(&[LeftParen]) {
             let expr: Box<dyn Expr + 'b> = self.expression();
-            if self.match_withs(&[RightParen]) {
-                return Box::new(Grouping::new(expr));
+            if !self.match_withs(&[RightParen]) {
+                self.error(ParserErrorType::MissingRightParen);
             }
-            panic!(
-                "There is no right pranthetics in the right side of the expression {}",
-                expr
-            );
+            return Box::new(Grouping::new(expr));
         }
-        panic!(
-            "The token is {:?} \nThere should be a expression here.",
-            self.current_token()
-        );
+        self.error(ParserErrorType::MissingValue);
+        Box::new(Value::new(Object::Value(Values::Null)))
     }
     fn match_withs(&mut self, token_types: &[TokenType]) -> bool {
         let Some(current_token) = self.current_token() else {
@@ -252,7 +256,9 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
     }
 
     fn get_errors(&mut self) -> Option<ParserErrors<'b>> {
-        if self.errors.is_empty(){return None;}
+        if self.errors.is_empty() {
+            return None;
+        }
         Some(take(&mut self.errors))
     }
 }

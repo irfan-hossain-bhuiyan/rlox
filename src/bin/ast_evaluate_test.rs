@@ -12,7 +12,7 @@ fn eval_expr(input: &str,interpreter:&mut Interpreter) {
         eprintln!("Can't convert to asciistring");
         return;
     };
-    let token_tree = Scanner::new(&input).scan_tokens();
+    let Ok(token_tree) = Scanner::new(&input).scan_tokens() else{return;};
     let parsed = Parser::new(&token_tree).parse();
     match parsed{
         Ok(x)=>interpreter.interpret(&x),
