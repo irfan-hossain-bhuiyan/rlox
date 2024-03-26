@@ -5,6 +5,7 @@ use rlox::{basic_function::repl, interpreter::Interpreter, lox_error::emit_error
 fn main() {
     let mut stdout=stdout();
     let mut interpreter=Interpreter::new(&mut stdout);
+    interpreter.repl_mode();
     repl(|x|eval_expr(x,&mut interpreter));   
 }
 fn eval_expr(input: &str,interpreter:&mut Interpreter) {

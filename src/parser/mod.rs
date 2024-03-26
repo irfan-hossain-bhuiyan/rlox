@@ -3,7 +3,7 @@ use std::{error::Error, fmt::Display, mem::take};
 use crate::{
     ast::{
         expression::{Assign, BinaryOp, Expr, Grouping, Literal, Unary, Value, Variable},
-        statement::{Expression, Print, Block, Stmt, Var},
+        statement::{Block, Expression, Print, Statements, Stmt, Var},
     },
     lox_object::{Object, Values},
     token::{Token, TokenType},
@@ -42,7 +42,7 @@ pub struct ParserError<'a> {
 }
 impl Error for ParserError<'_> {}
 pub type ParserErrors<'b> = Vec<ParserError<'b>>;
-type Result<'b> = std::result::Result<Block<'b>, ParserErrors<'b>>;
+type Result<'b> = std::result::Result<Statements<'b>, ParserErrors<'b>>;
 impl Display for ParserError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let pos = self.pos.span();

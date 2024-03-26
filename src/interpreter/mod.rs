@@ -21,4 +21,8 @@ impl<'a> Interpreter<'a>{
             emit_error(x.deref());
         }
     }
+    ///Setup the environment espicially for repl,
+    pub fn repl_mode(&mut self){
+        self.env.create_sub_values();
+    }
 }

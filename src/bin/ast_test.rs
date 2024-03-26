@@ -1,6 +1,6 @@
 use std::{io::stdout, ops::Deref, str::FromStr};
 
-use rlox::{interpreter::Interpreter, lox_error::emit_errors, parser::Parser, token::Scanner, *};
+use rlox::{interpreter::Interpreter, lox_error::emit_errors, parser::Parser, token::Scanner};
 use ascii::AsciiString;
 fn main(){
     let mut stdout=stdout();

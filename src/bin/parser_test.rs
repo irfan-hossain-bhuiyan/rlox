@@ -19,6 +19,6 @@ fn main() {
         let parser = Parser::new(&tokens).parse();
         println!("string is:{}", string);
         println!("tokens is:{:?}", tokens);
-        println!("parsed is:{}", parser.unwrap());
+        println!("parsed is:{:?}", parser.unwrap());
     }
 }

@@ -1,43 +1,66 @@
-use std::{error::Error, fmt::{Debug, Display}};
-
-use crate::{ast::expression::Expr, interpreter::environment::Environment,
-    token::Token,
+use std::{
+    error::Error,
+    fmt::{Debug, Display},
 };
+
+use crate::{ast::expression::Expr, interpreter::environment::Environment, token::Token};
 ///program → declaration* EOF ;
 ///declaration → varDecl  | statement ;
 ///statement → exprStmt  | printStmt |  Block;
 ///Block -> "{" declaration* "}"
 ///varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
-pub trait Stmt: Display+Debug {
+pub trait Stmt: Debug {
     fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>>;
 }
-#[derive(Debug,Default)]
-pub struct Block<'a>{
-    source:Vec<Box<dyn Stmt+'a>>,
+#[derive(Debug, Default)]
+pub struct Block<'a> {
+    source: Vec<Box<dyn Stmt + 'a>>,
+}
+#[derive(Debug, Default)]
+pub struct Statements<'a> {
+    source: Vec<Box<dyn Stmt + 'a>>,
 }
 
-impl<'a> Block<'a> {
-    pub fn new(source: Vec<Box<dyn Stmt+'a>>) -> Self {
+impl<'a> Statements<'a> {
+    pub fn new(source: Vec<Box<dyn Stmt + 'a>>) -> Self {
         Self { source }
     }
 }
-impl<'a> From<Vec<Box<dyn Stmt+'a>>> for Block<'a>{
-    fn from(value: Vec<Box<dyn Stmt+'a>>) -> Self {
-        Self::new(value)
-    }
-}
-impl Display for Block<'_>{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for x in self.source.iter(){
-            write!(f,"{};\n",x)?
+impl<'a> Stmt for Statements<'a> {
+    fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>> {
+        for x in self.source.iter() {
+            x.execute(env)?
         }
         Ok(())
     }
 }
-impl Stmt for Block<'_>{
+impl<'a> From<Vec<Box<dyn Stmt+'a>>> for Statements<'a>{
+    fn from(value: Vec<Box<dyn Stmt+'a>>) -> Self {
+        Statements::new(value)
+    }
+}
+impl<'a> Block<'a> {
+    pub fn new(source: Vec<Box<dyn Stmt + 'a>>) -> Self {
+        Self { source }
+    }
+}
+impl<'a> From<Vec<Box<dyn Stmt + 'a>>> for Block<'a> {
+    fn from(value: Vec<Box<dyn Stmt + 'a>>) -> Self {
+        Self::new(value)
+    }
+}
+//impl Display for Block<'_>{
+//    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//        for x in self.source.iter(){
+//            write!(f,"{};\n",x)?
+//        }
+//        Ok(())
+//    }
+//}
+impl Stmt for Block<'_> {
     fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>> {
         env.create_sub_values();
-        for x in self.source.iter(){
+        for x in self.source.iter() {
             x.execute(env)?
         }
         env.delete_sub_values();
@@ -53,9 +76,9 @@ pub struct Var<'a> {
     name: Token<'a>,
     initializer: Box<dyn Expr<'a> + 'a>,
 }
-impl Display for Var<'_>{
+impl Display for Var<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,"{} = {}",self.name,self.initializer)
+        write!(f, "{} = {}", self.name, self.initializer)
     }
 }
 
@@ -76,9 +99,9 @@ impl<'a> Expression<'a> {
         Self { expression }
     }
 }
-impl Display for Expression<'_>{
+impl Display for Expression<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,"{};",self.expression)
+        write!(f, "{};", self.expression)
     }
 }
 #[derive(Debug)]
@@ -91,9 +114,9 @@ impl<'a> Print<'a> {
         Self { expression }
     }
 }
-impl Display for Print<'_>{
+impl Display for Print<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,"Print({})",self.expression)
+        write!(f, "Print({})", self.expression)
     }
 }
 
@@ -105,7 +128,7 @@ impl Stmt for Expression<'_> {
 }
 impl Stmt for Print<'_> {
     fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>> {
-        let value=self.expression.evaluate_to_val(env)?;
+        let value = self.expression.evaluate_to_val(env)?;
         env.writeln(&value.to_string())?;
         Ok(())
     }
