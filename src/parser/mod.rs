@@ -3,7 +3,7 @@ use std::{error::Error, fmt::Display, mem::take};
 use crate::{
     ast::{
         expression::{Assign, BinaryOp, Expr, Grouping, Literal, Unary, Value, Variable},
-        statement::{Expression, Print, Statements, Stmt, Var},
+        statement::{Expression, Print, Block, Stmt, Var},
     },
     lox_object::{Object, Values},
     token::{Token, TokenType},
@@ -21,15 +21,17 @@ enum ParserErrorType {
     MissingRightParen,
     MissingValue,
     MissingVariable,
+    MissingRightBrace,
 }
 impl ParserErrorType {
     fn to_str(&self) -> &'static str {
         match self {
-            Self::MissingSemicolon => "Semicolon (;) missing after statement.",
+            Self::MissingSemicolon => "Semicolon \";\" missing after statement.",
             Self::InvalidAssignment => "Right side of the assignment is not a variable.",
             Self::MissingValue => "There should be a value here.",
-            Self::MissingRightParen => "Right Parenthethis is missing",
+            Self::MissingRightParen => "Right Parenthethis \")\" is missing",
             Self::MissingVariable=>"Variable not found",
+            Self::MissingRightBrace=>"Right Brace \"}\" is missing",
         }
     }
 }
@@ -40,7 +42,7 @@ pub struct ParserError<'a> {
 }
 impl Error for ParserError<'_> {}
 pub type ParserErrors<'b> = Vec<ParserError<'b>>;
-type Result<'b> = std::result::Result<Statements<'b>, ParserErrors<'b>>;
+type Result<'b> = std::result::Result<Block<'b>, ParserErrors<'b>>;
 impl Display for ParserError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let pos = self.pos.span();
@@ -53,6 +55,11 @@ impl<'a> ParserError<'a> {
         Self { pos, error_type }
     }
 }
+///program → declaration* EOF ;
+///declaration → varDecl  | statement ;
+///statement → exprStmt  | printStmt |  Block;
+///Block -> "{" declaration* "}"
+///varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
 /// expression->assignment
 /// assignment → IDENTIFIER "=" assignment  | equality ;
 /// equiltiy->comparasion ("!="|"==" comparasion)*
@@ -217,6 +224,9 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         if self.match_withs(&[TokenType::Print]) {
             return self.print_statement();
         }
+        if self.match_withs(&[TokenType::LeftBrace]){
+            return self.block_statement();
+        }
         self.expression_statement()
     }
 
@@ -261,4 +271,19 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         }
         Some(take(&mut self.errors))
     }
+
+    fn block_statement(&mut self) -> Box<dyn Stmt+'b> {
+       let mut statements:Vec<Box<dyn Stmt>>=Vec::new();
+       while !self.checks(&[TokenType::RightBrace]) || ! self.is_at_end() {
+           statements.push(self.declaration());
+       }
+       self.consume(TokenType::RightBrace, ParserErrorType::MissingRightBrace);
+       Box::new(Block::new(statements))
+    }
+
+    fn checks(&self, token_types: &[TokenType]) -> bool {
+        let Some(token)=self.current_token() else{return false;};
+        return token.matches_token(token_types);
+    }
+
 }

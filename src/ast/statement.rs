@@ -5,27 +5,28 @@ use crate::{ast::expression::Expr, interpreter::environment::Environment,
 };
 ///program → declaration* EOF ;
 ///declaration → varDecl  | statement ;
-///statement → exprStmt  | printStmt ;
+///statement → exprStmt  | printStmt |  Block;
+///Block -> "{" declaration* "}"
 ///varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
 pub trait Stmt: Display+Debug {
     fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>>;
 }
 #[derive(Debug,Default)]
-pub struct Statements<'a>{
+pub struct Block<'a>{
     source:Vec<Box<dyn Stmt+'a>>,
 }
 
-impl<'a> Statements<'a> {
+impl<'a> Block<'a> {
     pub fn new(source: Vec<Box<dyn Stmt+'a>>) -> Self {
         Self { source }
     }
 }
-impl<'a> From<Vec<Box<dyn Stmt+'a>>> for Statements<'a>{
+impl<'a> From<Vec<Box<dyn Stmt+'a>>> for Block<'a>{
     fn from(value: Vec<Box<dyn Stmt+'a>>) -> Self {
         Self::new(value)
     }
 }
-impl Display for Statements<'_>{
+impl Display for Block<'_>{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for x in self.source.iter(){
             write!(f,"{};\n",x)?
@@ -33,11 +34,13 @@ impl Display for Statements<'_>{
         Ok(())
     }
 }
-impl Stmt for Statements<'_>{
+impl Stmt for Block<'_>{
     fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>> {
+        env.create_sub_values();
         for x in self.source.iter(){
             x.execute(env)?
         }
+        env.delete_sub_values();
         Ok(())
     }
 }

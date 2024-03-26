@@ -1,41 +1,66 @@
-use std::{collections::HashMap, fmt::Debug, io::Write};
+use std::{collections::{HashMap, VecDeque}, fmt::Debug, io::Write};
 
 use crate::lox_object::Values;
 
-pub struct Environment<'a>{
-    values:HashMap<String,Values>,
-    stdout:&'a mut dyn Write,    
+pub struct Environment<'a> {
+    values: VecDeque<HashMap<String, Values>>,
+    stdout: &'a mut dyn Write,
 }
 
-impl Debug for Environment<'_>{
+impl Debug for Environment<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,"Environment{{values:{:?}}}",self.values)
+        write!(f, "Environment{{values:{:?}}}", self.values)
     }
 }
-impl<'a> Environment<'a>{
-    pub(super) fn new(stdout:&'a mut dyn Write)->Self{
-        Self{
-            values:HashMap::new(),
+impl<'a> Environment<'a> {
+    pub(super) fn new(stdout: &'a mut dyn Write) -> Self {
+        Self {
+            values: VecDeque::new(),
             stdout,
         }
     }
-    pub fn get(&self,name:&str)->Option<&Values>{
-        self.values.get(name)
+    pub fn create_sub_values(&mut self){
+        self.values.push_front(HashMap::new());
     }
-    pub fn define(&mut self,name:String,value:Values){
-        self.values.insert(name, value);
+    pub fn delete_sub_values(&mut self){
+        self.values.pop_front();
     }
-    pub fn redefine(&mut self,name:&str,value:Values)->Result<(),String>{
-        match self.values.get_mut(name){
-            Some(x)=>{*x=value;Ok(())},
-            None=>Err("Variable not found".to_string()),
+   pub fn get(&self, name: &str) -> Option<&Values> {
+       for x in self.values.iter(){
+            let value=x.get(name);
+            if value.is_some(){return value;}
+       }
+       None
+    }
+   fn get_mut(&mut self,name:&str)->Option<&mut Values>{
+        for x in self.values.iter_mut(){
+            let value=x.get_mut(name);
+            if value.is_some(){return value;}
         }
+        None
+   }
+    pub fn define(&mut self, name: String, value: Values) {
+        self.current_block_mut().insert(name,value);
     }
-    pub fn contains(&self,name:&str)->bool{
-        self.values.contains_key(name)
+    pub fn redefine(&mut self, name: &str, value: Values) -> Result<(), String> {
+        match self.get_mut(name){
+            Some(x)=>*x=value,
+            None=>return Err(format!("variable {} is not defined",name))
+        }
+        Ok(())
     }
-    pub fn writeln(&mut self, output:&str) -> Result<(), std::io::Error> {
-        writeln!(self.stdout,"{}",output)
+    pub fn contains(&self, name: &str) -> bool {
+        self.get(name).is_some()
+    }
+    pub fn writeln(&mut self, output: &str) -> Result<(), std::io::Error> {
+        writeln!(self.stdout, "{}", output)
+    }
+
+    fn current_block(&self) -> &HashMap<String, Values>  {
+        self.values.front().unwrap()
+    }
+    fn current_block_mut(&mut self)->&mut HashMap<String,Values>{
+        self.values.front_mut().unwrap()
     }
 }
 #[macro_export]
