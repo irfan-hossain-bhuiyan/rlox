@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{
     fmt::Display,
     result::Result,
@@ -50,7 +51,7 @@ impl Display for Values {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Values::*;
         match self {
-            Str(x) => write!(f, "\"{}\"", x),
+            Str(x) => Display::fmt(x,f),
             Boolean(0.0) => write!(f, "false"),
             Boolean(_) => write!(f, "true"),
             Number(x) => write!(f, "{x}"),
@@ -63,10 +64,12 @@ impl Values {
         use Values::*;
         let ans = match (self, rhs) {
             (Number(x), Number(y)) => Number(x + y),
+            (Number(x),Str(y))=>Str(x.to_string()+&y),
             (Number(x), Boolean(y)) => Number(x + y),
             (Boolean(x), Number(y)) => Number(x + y),
             (Boolean(x), Boolean(y)) => Number(x + y),
             (Str(x), Str(y)) => Str(x + &y),
+            (Str(x),Number(y))=>Str(x+&y.to_string()),
             (s, r) => return Err(format!("Can't add {} and {}", s, r)),
         };
         Ok(ans)

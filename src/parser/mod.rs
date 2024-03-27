@@ -4,9 +4,7 @@ use crate::{
     ast::{
         expression::{Assign, BinaryOp, Expr, Grouping, Literal, Unary, Value, Variable},
         statement::{Block, Expression, Print, Statements, Stmt, Var},
-    },
-    lox_object::{Object, Values},
-    token::{Token, TokenType},
+    }, lox_error::Errors, lox_object::{Object, Values}, token::{Token, TokenType}
 };
 #[derive(Debug, Clone)]
 pub struct Parser<'a, 'b: 'a> {
@@ -41,8 +39,9 @@ pub struct ParserError<'a> {
     error_type: ParserErrorType,
 }
 impl Error for ParserError<'_> {}
-pub type ParserErrors<'b> = Vec<ParserError<'b>>;
-type Result<'b> = std::result::Result<Statements<'b>, ParserErrors<'b>>;
+pub type ParserErrors<'b> = Errors<ParserError<'b>>;
+type Stmts<'b>=Box<[Box<dyn Stmt+'b>]>;
+type Result<'b> = std::result::Result<Stmts<'b>,ParserErrors<'b>>;
 impl Display for ParserError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let pos = self.pos.span();
@@ -269,16 +268,16 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         if self.errors.is_empty() {
             return None;
         }
-        Some(take(&mut self.errors))
+        Some(take(&mut self.errors).into())
     }
 
     fn block_statement(&mut self) -> Box<dyn Stmt+'b> {
        let mut statements:Vec<Box<dyn Stmt>>=Vec::new();
-       while !self.checks(&[TokenType::RightBrace]) || ! self.is_at_end() {
+       while !self.checks(&[TokenType::RightBrace]) && ! self.is_at_end() {
            statements.push(self.declaration());
        }
        self.consume(TokenType::RightBrace, ParserErrorType::MissingRightBrace);
-       Box::new(Block::new(statements))
+       Box::new(Block::from(statements))
     }
 
     fn checks(&self, token_types: &[TokenType]) -> bool {

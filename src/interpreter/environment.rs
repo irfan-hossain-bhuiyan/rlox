@@ -53,7 +53,8 @@ impl<'a> Environment<'a> {
         self.get(name).is_some()
     }
     pub fn writeln(&mut self, output: &str) -> Result<(), std::io::Error> {
-        writeln!(self.stdout, "{}", output)
+        self.stdout.write_all(output.as_bytes())?;
+        self.stdout.write_all(b"\n")
     }
 
     fn current_block(&self) -> &HashMap<String, Values>  {

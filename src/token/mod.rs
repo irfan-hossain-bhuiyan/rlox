@@ -1,6 +1,8 @@
 use std::{error::Error, fmt::Display, mem::take};
 
 use ascii::{AsAsciiStr, AsciiChar, AsciiStr};
+
+use crate::lox_error::Errors;
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[allow(dead_code)]
 pub enum TokenType {
@@ -159,7 +161,7 @@ impl Display for TokenizationError {
 }
 impl Error for TokenizationError{}
 type Tokens<'a> = Vec<Token<'a>>;
-pub type TokenizationErrors = Vec<TokenizationError>;
+pub type TokenizationErrors = Errors<TokenizationError>;
 #[derive(Debug, Clone)]
 pub struct Scanner<'a> {
     source: &'a AsciiStr,
@@ -168,7 +170,7 @@ pub struct Scanner<'a> {
     coloum: usize,
     current: usize,
     start: usize,
-    errors: TokenizationErrors,
+    errors: Vec<TokenizationError>,
 }
 type Result<'a>=std::result::Result<Tokens<'a>,TokenizationErrors>;
 impl<'a> Scanner<'a> {
@@ -211,7 +213,7 @@ impl<'a> Scanner<'a> {
         if self.errors.is_empty(){
             return None;
         }
-        Some(take(&mut self.errors))
+        Some(take(&mut self.errors).into())
     }
     fn is_at_end(&self) -> bool {
         self.source.len() <= self.current
@@ -293,6 +295,7 @@ impl<'a> Scanner<'a> {
         }
     }
     fn token_string(&mut self) {
+        self.ignore_front();
         while self.peek() != '"' && !self.is_at_end() {
             if self.peek() == '\n' {
                 self.line += 1;
@@ -302,8 +305,8 @@ impl<'a> Scanner<'a> {
         if self.is_at_end() {
             self.throw_error(TokenizationErrorType::UnFinishedString);
         }
-        self.advance();
         self.add_token(TokenType::String);
+        self.advance();
     }
     fn token_identifier(&mut self) {
         while self.peek().is_ascii_alphanumeric() {
@@ -366,5 +369,9 @@ impl<'a> Scanner<'a> {
     fn token_line(&mut self) {
         self.coloum = 0;
         self.line += 1;
+    }
+
+    fn ignore_front(&mut self) {
+        self.start+=1;//This is to remove the quote from the string.
     }
 }

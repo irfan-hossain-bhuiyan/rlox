@@ -14,15 +14,27 @@ pub trait Stmt: Debug {
 }
 #[derive(Debug, Default)]
 pub struct Block<'a> {
-    source: Vec<Box<dyn Stmt + 'a>>,
+    source: Box<[Box<dyn Stmt + 'a>]>,
+}
+
+impl<'a> From<Statements<'a>> for Block<'a> {
+    fn from(value: Statements<'a>) -> Self {
+        Self::from(value.source)
+    }
 }
 #[derive(Debug, Default)]
 pub struct Statements<'a> {
-    source: Vec<Box<dyn Stmt + 'a>>,
+    source: Box<[Box<dyn Stmt + 'a>]>,
 }
 
-impl<'a> Statements<'a> {
-    pub fn new(source: Vec<Box<dyn Stmt + 'a>>) -> Self {
+impl<'a> From<Box<[Box<dyn Stmt + 'a>]>> for Statements<'a> {
+    fn from(source: Box<[Box<dyn Stmt + 'a>]>) -> Self {
+        Self { source }
+    }
+}
+
+impl<'a> From<Box<[Box<dyn Stmt + 'a>]>> for Block<'a> {
+    fn from(source: Box<[Box<dyn Stmt + 'a>]>) -> Self {
         Self { source }
     }
 }
@@ -34,19 +46,14 @@ impl<'a> Stmt for Statements<'a> {
         Ok(())
     }
 }
-impl<'a> From<Vec<Box<dyn Stmt+'a>>> for Statements<'a>{
-    fn from(value: Vec<Box<dyn Stmt+'a>>) -> Self {
-        Statements::new(value)
-    }
-}
-impl<'a> Block<'a> {
-    pub fn new(source: Vec<Box<dyn Stmt + 'a>>) -> Self {
-        Self { source }
+impl<'a> From<Vec<Box<dyn Stmt + 'a>>> for Statements<'a> {
+    fn from(value: Vec<Box<dyn Stmt + 'a>>) -> Self {
+        Self{source:value.into()}
     }
 }
 impl<'a> From<Vec<Box<dyn Stmt + 'a>>> for Block<'a> {
     fn from(value: Vec<Box<dyn Stmt + 'a>>) -> Self {
-        Self::new(value)
+        Self{source:value.into()}
     }
 }
 //impl Display for Block<'_>{
