@@ -1,4 +1,3 @@
-use core::fmt;
 use std::{
     fmt::Display,
     result::Result,
@@ -169,15 +168,19 @@ impl Values {
         };
         Ok(ans.into())
     }
-    pub fn is_truthy(&self) -> Values {
+    pub fn is_truthy(&self) -> bool {
         use Values::{Boolean, Number, Str,Null};
         match self {
             Boolean(x) | Number(x) => *x != 0.0,
             Str(x) => !x.is_empty(),
             Null=>false,
         }
-        .into()
     }
+    ///Cast a lox value to lox boolean value
+    pub fn cast_to_boolean(&self)->Values{
+        self.is_truthy().into()
+    }   
+
 
     pub fn negative(&self) -> Result<Values, String> {
         use Values::*;

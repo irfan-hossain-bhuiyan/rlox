@@ -1,11 +1,6 @@
-print("This is lox code");
-var a=10;
-print("a outside block is "+a);
-{
-	var a=5;
-	print("a inside block: "+a);
-	a=a+10;
-	print("a inside block after mutation "+a);
+if(true){
+	print(1);
 }
-print("a outside block is: "+a);
-print("a out side the block:"+a);
+else{
+	print(2);
+}

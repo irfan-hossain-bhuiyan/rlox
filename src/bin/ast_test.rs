@@ -1,6 +1,8 @@
-use std::{io::stdout, ops::Deref, str::FromStr};
+use std::{io::stdout, str::FromStr};
 
-use rlox::{interpreter::Interpreter, lox_error::emit_errors, parser::Parser, token::Scanner};
+use rlox::ast::statement::Block;
+use rlox::{interpreter::Interpreter, parser::Parser, token::Scanner};
+use rlox::lox_error::emit_error;
 use ascii::AsciiString;
 fn main(){
     let mut stdout=stdout();
@@ -9,11 +11,14 @@ fn main(){
     let tokens=Scanner::new(&a).scan_tokens();
     let tokens=match tokens{
         Ok(x)=>x,
-        Err(x)=>{emit_errors(&x);return;}
+        Err(x)=>{emit_error(&x);return;}
     };
     let parser=Parser::new(&tokens).parse();
     match parser{
-        Ok(x)=>interpreter.interpret(&x),
-        Err(x)=>emit_errors(&x),
+        Ok(x)=>{
+            let x:Block=x.into();
+            interpreter.interpret(&x)
+        },
+        Err(x)=>emit_error(&x),
     }
 }

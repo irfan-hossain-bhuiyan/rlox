@@ -1,5 +1,5 @@
 use ascii::AsciiString;
-use rlox::lox_error::emit_errors;
+use rlox::lox_error::emit_error;
 use rlox::parser::Parser;
 use rlox::token::Scanner;
 use std::io;
@@ -14,7 +14,7 @@ fn main() {
         let tokens = Scanner::new(&string).scan_tokens();
         let tokens=match tokens{
             Ok(x)=>x,
-            Err(x)=>{emit_errors(&x);return ;}
+            Err(x)=>{emit_error(&x);return ;}
         };
         let parser = Parser::new(&tokens).parse();
         println!("string is:{}", string);

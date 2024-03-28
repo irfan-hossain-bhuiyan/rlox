@@ -6,9 +6,9 @@ fn main(){
     let args:Vec<String>=env::args().collect();
     let path=match args.get(1){
         Some(x)=>x.as_str(),
-        None=>unimplemented!(),
+        None=>"",
     };
-    //let path="test.lox";
+    let path="test.lox";
     let code=fs::read_to_string(path).unwrap();
     let ast=code_to_stblock(&code).unwrap();
     println!("{:?}",ast);

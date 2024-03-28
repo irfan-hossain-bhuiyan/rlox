@@ -3,7 +3,7 @@ use std::{error::Error, fmt::Display, mem::take};
 use crate::{
     ast::{
         expression::{Assign, BinaryOp, Expr, Grouping, Literal, Unary, Value, Variable},
-        statement::{Block, Expression, Print, Statements, Stmt, Var},
+        statement::{Block, DynStmt, Expression, If, Print, Stmt, Var},
     }, lox_error::Errors, lox_object::{Object, Values}, token::{Token, TokenType}
 };
 #[derive(Debug, Clone)]
@@ -20,6 +20,7 @@ enum ParserErrorType {
     MissingValue,
     MissingVariable,
     MissingRightBrace,
+    MissingLeftParen,
 }
 impl ParserErrorType {
     fn to_str(&self) -> &'static str {
@@ -28,6 +29,7 @@ impl ParserErrorType {
             Self::InvalidAssignment => "Right side of the assignment is not a variable.",
             Self::MissingValue => "There should be a value here.",
             Self::MissingRightParen => "Right Parenthethis \")\" is missing",
+            Self::MissingLeftParen => "Left Parenthethis \"(\" is missing",
             Self::MissingVariable=>"Variable not found",
             Self::MissingRightBrace=>"Right Brace \"}\" is missing",
         }
@@ -86,7 +88,7 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
     /// As for now it just parse expression.
     pub fn parse(&mut self) -> Result<'b> {
         let mut statements: Vec<Box<dyn Stmt>> = Vec::new();
-        while !self.is_at_end() {
+        while ! self.is_at_end() {
             if self.match_withs(&[TokenType::Eof]) {
                 break;
             }
@@ -223,6 +225,9 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         if self.match_withs(&[TokenType::Print]) {
             return self.print_statement();
         }
+        if self.match_withs(&[TokenType::If]){
+            return  self.if_statement();
+        }
         if self.match_withs(&[TokenType::LeftBrace]){
             return self.block_statement();
         }
@@ -283,6 +288,26 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
     fn checks(&self, token_types: &[TokenType]) -> bool {
         let Some(token)=self.current_token() else{return false;};
         return token.matches_token(token_types);
+    }
+
+    fn if_statement(&mut self) -> DynStmt<'b> {
+        self.consume(TokenType::LeftParen,ParserErrorType::MissingLeftParen);
+        let condition=self.expression();
+        self.consume(TokenType::RightParen,ParserErrorType::MissingRightParen);
+        let then_b=self.statement();
+        let else_b=if self.match_withs(&[TokenType::Else]){
+            Some(self.statement())
+        }else{None};
+        return Box::new(If::new(condition,then_b,else_b));
+    }
+
+    fn match_with(&mut self, token_type: TokenType) -> bool {
+        let token=match self.current_token(){
+            Some(x)=>x,
+            None=>return false,
+        };
+        self.advance();
+        return token.match_token(&token_type);
     }
 
 }

@@ -5,7 +5,8 @@ use std::{
     fmt::{Debug, Display},
     result::Result,
 };
-pub trait Expr<'tok>: Display + Debug {
+pub type DynExpr<'a>=Box<dyn Expr<'a>+'a>;
+pub trait Expr<'tok>: Debug {
     fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String>;
     fn evaluate_to_val(&self, env: &mut Environment) -> Result<Values, String> {
         self.evaluate_to_obj(env)?.into_value(env)
@@ -16,9 +17,9 @@ pub trait Expr<'tok>: Display + Debug {
 }
 #[derive(Debug)]
 pub struct BinaryOp<'a> {
-    left: Box<dyn Expr<'a> + 'a>,
+    left: DynExpr<'a>,
     operator: Token<'a>,
-    right: Box<dyn Expr<'a> + 'a>,
+    right: DynExpr<'a>,
 }
 #[derive(Debug)]
 pub struct Variable<'a> {
@@ -47,17 +48,12 @@ impl<'a> Variable<'a> {
 #[derive(Debug)]
 pub struct Assign<'b> {
     name: Token<'b>,
-    value: Box<dyn Expr<'b> + 'b>,
+    value: DynExpr<'b>,
 }
 
 impl<'b> Assign<'b> {
-    pub fn new(name: Token<'b>, value: Box<dyn Expr<'b> + 'b>) -> Self {
+    pub fn new(name: Token<'b>, value: DynExpr<'b>) -> Self {
         Self { name, value }
-    }
-}
-impl Display for Assign<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} = {}", self.name, self.value)
     }
 }
 impl<'b> Expr<'b> for Assign<'b> {
@@ -91,7 +87,7 @@ impl Expr<'_> for Value {
     }
 }
 impl<'a> BinaryOp<'a> {
-    pub fn new(left: Box<dyn Expr<'a> + 'a>, operator: Token<'a>, right: Box<dyn Expr<'a> + 'a>) -> Self {
+    pub fn new(left: DynExpr<'a>, operator: Token<'a>, right: DynExpr<'a>) -> Self {
         Self {
             left,
             operator,
@@ -101,11 +97,11 @@ impl<'a> BinaryOp<'a> {
 }
 #[derive(Debug)]
 pub struct Grouping<'a> {
-    expression: Box<dyn Expr<'a> + 'a>,
+    expression: DynExpr<'a>,
 }
 
 impl<'a> Grouping<'a> {
-    pub fn new(expression: Box<dyn Expr<'a> + 'a>) -> Self {
+    pub fn new(expression: DynExpr<'a>) -> Self {
         Self { expression }
     }
 }
@@ -125,26 +121,14 @@ impl<'a> Literal<'a> {
 #[derive(Debug)]
 pub struct Unary<'a> {
     operator: Token<'a>,
-    right: Box<dyn Expr<'a> + 'a>,
+    right: DynExpr<'a>,
 }
 
 impl<'a> Unary<'a> {
-    pub fn new(operator: Token<'a>, right: Box<dyn Expr<'a> + 'a>) -> Self {
+    pub fn new(operator: Token<'a>, right: DynExpr<'a>) -> Self {
         Self { operator, right }
     }
 }
-impl Display for BinaryOp<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "({}{} {})",
-            self.operator.to_string(),
-            self.left.to_string(),
-            self.right.to_string()
-        )
-    }
-}
-
 impl Expr<'_> for BinaryOp<'_> {
     fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
         let left = self.left.evaluate_to_val(env)?;
@@ -173,21 +157,11 @@ impl Expr<'_> for Grouping<'_> {
         self.expression.evaluate_to_obj(env)
     }
 }
-impl Display for Grouping<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "(Group {})", self.expression.to_string())
-    }
-}
-impl Display for Literal<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.token.to_string())
-    }
-}
 impl Expr<'_> for Literal<'_> {
     fn evaluate_to_obj(&self, _env: &mut Environment) -> Result<Object, String> {
         use TokenType::{False, Number, String, True};
         let ans = match self.token_type() {
-            String => Values::Str(self.to_string()),
+            String => Values::Str(self.token.to_string()),
             Number => Values::Number(self.token.as_str().parse().unwrap()),
             True => Values::Boolean(1.0),
             False => Values::Boolean(0.0),
@@ -196,18 +170,13 @@ impl Expr<'_> for Literal<'_> {
         Ok(ans.into())
     }
 }
-impl Display for Unary<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write! {f,"({}{})",self.operator.to_string(),self.right.to_string()}
-    }
-}
 impl Expr<'_> for Unary<'_> {
     fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
         let right = self.right.evaluate_to_val(env)?;
         use TokenType::*;
         match self.operator.get_type() {
             Minus => right.negative(),
-            Bang => right.is_truthy().not(),
+            Bang => right.cast_to_boolean().not(),
             _ => Err("Other operator is not allowed".into()),
         }
         .map(|x| x.into())
