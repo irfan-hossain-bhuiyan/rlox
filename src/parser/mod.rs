@@ -2,9 +2,14 @@ use std::{error::Error, fmt::Display, mem::take};
 
 use crate::{
     ast::{
-        expression::{Assign, BinaryOp, Expr, Grouping, Literal, Unary, Value, Variable},
-        statement::{Block, DynStmt, Expression, If, Print, Stmt, Var},
-    }, lox_error::Errors, lox_object::{Object, Values}, token::{Token, TokenType}
+        expression::{
+            Assign, BinaryOp, CallExpr, DynExpr, Expr, Grouping, Literal, Logical, Unary, Value, Variable
+        },
+        statement::{Block, DynStmt, Expression, If, Print, Stmt, Var, WhileStmt},
+    },
+    lox_error::Errors,
+    lox_object::{Object, Values},
+    token::{Token, TokenType},
 };
 #[derive(Debug, Clone)]
 pub struct Parser<'a, 'b: 'a> {
@@ -21,6 +26,7 @@ enum ParserErrorType {
     MissingVariable,
     MissingRightBrace,
     MissingLeftParen,
+    MissingLeftBrace,
 }
 impl ParserErrorType {
     fn to_str(&self) -> &'static str {
@@ -30,8 +36,9 @@ impl ParserErrorType {
             Self::MissingValue => "There should be a value here.",
             Self::MissingRightParen => "Right Parenthethis \")\" is missing",
             Self::MissingLeftParen => "Left Parenthethis \"(\" is missing",
-            Self::MissingVariable=>"Variable not found",
-            Self::MissingRightBrace=>"Right Brace \"}\" is missing",
+            Self::MissingVariable => "Variable not found",
+            Self::MissingRightBrace => "Right Brace \"}\" is missing",
+            Self::MissingLeftBrace => "Left Brace \"{\" is missing",
         }
     }
 }
@@ -42,8 +49,8 @@ pub struct ParserError<'a> {
 }
 impl Error for ParserError<'_> {}
 pub type ParserErrors<'b> = Errors<ParserError<'b>>;
-type Stmts<'b>=Box<[Box<dyn Stmt+'b>]>;
-type Result<'b> = std::result::Result<Stmts<'b>,ParserErrors<'b>>;
+type Stmts<'b> = Box<[Box<dyn Stmt + 'b>]>;
+type Result<'b> = std::result::Result<Stmts<'b>, ParserErrors<'b>>;
 impl Display for ParserError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let pos = self.pos.span();
@@ -67,7 +74,9 @@ impl<'a> ParserError<'a> {
 /// comparasion -> term ("<"|"<="|">"|">=" term)*
 /// term ->factor ("+"|"-" factor)*
 /// factor-> unary ("*"|"/" unary)*
-/// unary->  ("!"|"-" unary) | primary
+/// unary->  ("!"|"-") unary | primary
+///call → primary ( "(" arguments? ")" )* ;
+///arguments → expression ( "," expression )* ;
 /// primary-> Literal | "(" expression ")"
 /// LIteral-> Values | Variable
 impl<'a, 'b: 'a> From<&'a [Token<'b>]> for Parser<'a, 'b> {
@@ -88,7 +97,7 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
     /// As for now it just parse expression.
     pub fn parse(&mut self) -> Result<'b> {
         let mut statements: Vec<Box<dyn Stmt>> = Vec::new();
-        while ! self.is_at_end() {
+        while !self.is_at_end() {
             if self.match_withs(&[TokenType::Eof]) {
                 break;
             }
@@ -100,11 +109,11 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         }
     }
     /// expression->equilitypar
-    fn expression(&mut self) -> Box<dyn Expr<'b> + 'b> {
+    fn expression(&mut self) -> DynExpr<'b> {
         self.assignment()
     }
-    fn assignment(&mut self) -> Box<dyn Expr<'b> + 'b> {
-        let expr = self.equility();
+    fn assignment(&mut self) -> DynExpr<'b> {
+        let expr = self.or();
         if self.match_withs(&[TokenType::Equal]) {
             let right = self.assignment();
             let name = expr.is_var().unwrap_or_else(|| {
@@ -114,6 +123,15 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
             return Box::new(Assign::new(name, right));
         }
         expr
+    }
+    fn or(&mut self) -> DynExpr<'b> {
+        let mut expr = self.and();
+        while self.match_with(TokenType::Or) {
+            let operator = self.previous_token();
+            let right = self.and();
+            expr = Box::new(Logical::new(expr, operator, right));
+        }
+        return expr;
     }
     /// equiltiy->comparasion ("!="|"!" comparasion)*
     fn equility(&mut self) -> Box<dyn Expr<'b> + 'b> {
@@ -167,7 +185,7 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
             let right: Box<dyn Expr + 'b> = self.unary();
             return Box::new(Unary::new(operator, right));
         }
-        self.primary()
+        self.call()
     }
     /// primary-> Literal | "(" expression ")"
     fn primary(&mut self) -> Box<dyn Expr<'b> + 'b> {
@@ -187,7 +205,7 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
             return Box::new(Grouping::new(expr));
         }
         self.error(ParserErrorType::MissingValue);
-        Box::new(Value::new(Object::Value(Values::Null)))
+        Box::new(Value::from(Object::Value(Values::Null)))
     }
     fn match_withs(&mut self, token_types: &[TokenType]) -> bool {
         let Some(current_token) = self.current_token() else {
@@ -225,11 +243,17 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         if self.match_withs(&[TokenType::Print]) {
             return self.print_statement();
         }
-        if self.match_withs(&[TokenType::If]){
-            return  self.if_statement();
+        if self.match_withs(&[TokenType::If]) {
+            return self.if_statement();
         }
-        if self.match_withs(&[TokenType::LeftBrace]){
+        if self.match_with(TokenType::While) {
+            return self.while_statement();
+        }
+        if self.match_withs(&[TokenType::LeftBrace]) {
             return self.block_statement();
+        }
+        if self.match_with(TokenType::For) {
+            return self.for_statement();
         }
         self.expression_statement()
     }
@@ -266,7 +290,7 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
 
     fn error(&mut self, error_type: ParserErrorType) {
         self.errors
-            .push(ParserError::new(self.previous_token(), error_type));
+            .push(ParserError::new(self.current_token().unwrap(), error_type));
     }
 
     fn get_errors(&mut self) -> Option<ParserErrors<'b>> {
@@ -276,38 +300,134 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         Some(take(&mut self.errors).into())
     }
 
-    fn block_statement(&mut self) -> Box<dyn Stmt+'b> {
-       let mut statements:Vec<Box<dyn Stmt>>=Vec::new();
-       while !self.checks(&[TokenType::RightBrace]) && ! self.is_at_end() {
-           statements.push(self.declaration());
-       }
-       self.consume(TokenType::RightBrace, ParserErrorType::MissingRightBrace);
-       Box::new(Block::from(statements))
+    fn block_statement(&mut self) -> Box<dyn Stmt + 'b> {
+        let mut statements: Vec<Box<dyn Stmt>> = Vec::new();
+        while !self.checks(&[TokenType::RightBrace]) && !self.is_at_end() {
+            statements.push(self.declaration());
+        }
+        self.consume(TokenType::RightBrace, ParserErrorType::MissingRightBrace);
+        Box::new(Block::from(statements))
     }
 
     fn checks(&self, token_types: &[TokenType]) -> bool {
-        let Some(token)=self.current_token() else{return false;};
+        let Some(token) = self.current_token() else {
+            return false;
+        };
         return token.matches_token(token_types);
     }
 
     fn if_statement(&mut self) -> DynStmt<'b> {
-        self.consume(TokenType::LeftParen,ParserErrorType::MissingLeftParen);
-        let condition=self.expression();
-        self.consume(TokenType::RightParen,ParserErrorType::MissingRightParen);
-        let then_b=self.statement();
-        let else_b=if self.match_withs(&[TokenType::Else]){
+        self.consume(TokenType::LeftParen, ParserErrorType::MissingLeftParen);
+        let condition = self.expression();
+        self.consume(TokenType::RightParen, ParserErrorType::MissingRightParen);
+        let then_b = self.statement();
+        let else_b = if self.match_withs(&[TokenType::Else]) {
             Some(self.statement())
-        }else{None};
-        return Box::new(If::new(condition,then_b,else_b));
+        } else {
+            None
+        };
+        return Box::new(If::new(condition, then_b, else_b));
     }
 
     fn match_with(&mut self, token_type: TokenType) -> bool {
-        let token=match self.current_token(){
-            Some(x)=>x,
-            None=>return false,
+        let token = match self.current_token() {
+            Some(x) => x,
+            None => return false,
         };
-        self.advance();
-        return token.match_token(&token_type);
+        if token.match_token(&token_type) {
+            self.advance();
+            return true;
+        }
+        return false;
     }
 
+    fn and(&mut self) -> DynExpr<'b> {
+        let mut expr = self.equility();
+        while self.match_with(TokenType::And) {
+            let operator = self.previous_token();
+            let right = self.equility();
+            expr = Box::new(Logical::new(expr, operator, right));
+        }
+        expr
+    }
+
+    fn while_statement(&mut self) -> DynStmt<'b> {
+        self.consume(TokenType::LeftParen, ParserErrorType::MissingLeftParen);
+        let condition = self.expression();
+        self.consume(TokenType::RightParen, ParserErrorType::MissingRightParen);
+        let body = self.statement();
+        Box::new(WhileStmt::new(condition, body))
+    }
+
+    fn for_statement(&mut self) -> DynStmt<'b> {
+        self.consume(TokenType::LeftParen, ParserErrorType::MissingLeftParen);
+        let initializer = if self.match_with(TokenType::Semicolon) {
+            None
+        } else if self.match_with(TokenType::Var) {
+            Some(self.var_declaration())
+        } else {
+            Some(self.expression_statement())
+        };
+        let condition = if self.check(TokenType::Semicolon) {
+            Values::from(true).into()
+        } else {
+            self.expression()
+        };
+        self.consume(TokenType::Semicolon, ParserErrorType::MissingSemicolon);
+        let increment = if self.check(TokenType::RightParen) {
+            None
+        } else {
+            Some(self.expression())
+        };
+        self.consume(TokenType::RightParen, ParserErrorType::MissingRightParen);
+        let stmt = self.statement();
+        let mut output_body = Vec::new();
+        if let Some(initializer) = initializer {
+            output_body.push(initializer);
+        }
+        //Setting While loop
+        let mut while_body = vec![stmt];
+        if let Some(increment) = increment {
+            let increment = Expression::new(increment);
+            while_body.push(Box::new(increment));
+        }
+        let while_body = Box::new(Block::from(while_body));
+        let while_body = WhileStmt::new(condition, while_body);
+        output_body.push(Box::new(while_body));
+        return Box::new(Block::from(output_body));
+    }
+
+    fn check(&self, token_type: TokenType) -> bool {
+        let Some(ty) = self.current_token() else {
+            return false;
+        };
+        ty.match_token(&token_type)
+    }
+
+    fn call(&mut self) -> DynExpr<'b> {
+        let mut expr = self.primary();
+        loop {
+            if self.match_with(TokenType::LeftParen) {
+                expr = self.finishcall(expr);
+            } else {
+                break;
+            }
+        }
+        return expr;
+    }
+
+    fn finishcall(&mut self, callee: DynExpr<'b>) -> DynExpr<'b> {
+        let mut arguments = Vec::new();
+        if !self.check(TokenType::RightParen) {
+            loop {
+                arguments.push(self.expression());
+                if self.match_with(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+
+        let paren = self.consume(TokenType::Semicolon, ParserErrorType::MissingSemicolon);
+        return Box::new(CallExpr::new(callee, paren, arguments.into()));
+    }
 }

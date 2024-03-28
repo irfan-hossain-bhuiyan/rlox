@@ -5,13 +5,13 @@ use std::{
     fmt::{Debug, Display},
     result::Result,
 };
-pub type DynExpr<'a>=Box<dyn Expr<'a>+'a>;
+pub type DynExpr<'a> = Box<dyn Expr<'a> + 'a>;
 pub trait Expr<'tok>: Debug {
     fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String>;
     fn evaluate_to_val(&self, env: &mut Environment) -> Result<Values, String> {
         self.evaluate_to_obj(env)?.into_value(env)
     }
-    fn is_var(& self) -> Option<Token<'tok>> {
+    fn is_var(&self) -> Option<Token<'tok>> {
         None
     }
 }
@@ -22,9 +22,58 @@ pub struct BinaryOp<'a> {
     right: DynExpr<'a>,
 }
 #[derive(Debug)]
-pub struct Variable<'a> {
-    name:  Token<'a>,
+pub struct CallExpr<'a>{
+    callee:DynExpr<'a>,
+    paren:Token<'a>,
+    arguments:Box<[DynExpr<'a>]>
 }
+
+impl<'a> CallExpr<'a> {
+    pub fn new(callee: DynExpr<'a>, paren: Token<'a>, arguments: Box<[DynExpr<'a>]>) -> Self {
+        Self { callee, paren, arguments }
+    }
+}
+impl<'a> Expr<'a> for CallExpr<'a>{
+    fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
+        unimplemented!()
+    }
+}
+
+#[derive(Debug)]
+pub struct Variable<'a> {
+    name: Token<'a>,
+}
+#[derive(Debug)]
+pub struct Logical<'a> {
+    left: DynExpr<'a>,
+    operator: Token<'a>,
+    right: DynExpr<'a>,
+}
+
+impl<'a> Logical<'a> {
+    pub fn new(left: DynExpr<'a>, operator: Token<'a>, right: DynExpr<'a>) -> Self {
+        Self {
+            left,
+            operator,
+            right,
+        }
+    }
+}
+impl<'a> Expr<'a> for Logical<'a> {
+    fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
+        let left = self.left.evaluate_to_val(env)?;
+        let ans = match (self.operator.get_type(), left.is_truthy()) {
+            (TokenType::Or, true) => left,
+            (TokenType::And, false) => left,
+            (x, y) if matches!(x, TokenType::Or | TokenType::And) => {
+                self.right.evaluate_to_val(env)?
+            }
+            _ => panic!("There shoudn't be other toekn."),
+        };
+        return Ok(ans.into());
+    }
+}
+
 impl Display for Variable<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.name, f)
@@ -41,7 +90,7 @@ impl<'a> Expr<'a> for Variable<'a> {
     }
 }
 impl<'a> Variable<'a> {
-    pub fn new(name:Token<'a>) -> Self {
+    pub fn new(name: Token<'a>) -> Self {
         Variable { name }
     }
 }
@@ -71,9 +120,16 @@ impl From<Object> for Box<dyn Expr<'_>> {
         Box::new(Value(value))
     }
 }
-impl Value {
-    pub fn new(object: Object) -> Self {
-        Value(object)
+
+impl Value {}
+impl From<Object> for Value{
+    fn from(value: Object) -> Self {
+        Value(value)
+    }
+}
+impl From<Values> for Box<dyn Expr<'_>>{
+    fn from(value: Values) -> Self {
+        Box::new(Value(value.into()))
     }
 }
 impl Display for Value {

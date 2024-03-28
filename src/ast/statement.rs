@@ -4,11 +4,15 @@ use std::{
 };
 ///program → declaration* EOF ;
 ///declaration → varDecl  | statement ;
-///statement → exprStmt  | printStmt |  Block | ifStmt;
+///statement → exprStmt  | printStmt |  Block | ifStmt | whileStmt | forStmt;
+///whileStmt → "while" "(" expression ")" statement ;
 ///Block -> "{" declaration* "}"
 ///varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
 ///ifStmt → "if" "(" expression ")" statement  ( "else" statement )? ;
-
+///expression → assignment ;
+///assignment → IDENTIFIER "=" assignment  | logic_or ;
+///logic_or → logic_and ( "or" logic_and )* ;
+///logic_and → equality ( "and" equality )* ;
 use crate::{ast::expression::Expr, interpreter::environment::Environment, token::Token};
 
 use super::expression::DynExpr;
@@ -36,8 +40,26 @@ impl<'a> Stmt for If<'a>{
         Ok(())
     }
 }
+#[derive(Debug)]
+pub struct WhileStmt<'a>{
+   condition:DynExpr<'a>,
+   body:DynStmt<'a>,
+}
 
+impl<'a> Stmt for WhileStmt<'a> {
+    fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>> {
+        while self.condition.evaluate_to_val(env)?.is_truthy(){
+            self.body.execute(env)?;
+        }
+        Ok(())
+    }
+}
 
+impl<'a> WhileStmt<'a> {
+    pub fn new(condition: DynExpr<'a>, body: DynStmt<'a>) -> Self {
+        Self { condition, body }
+    }
+}
 pub type DynStmt<'a>=Box<dyn Stmt+'a>;
 pub trait Stmt: Debug {
     fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>>;

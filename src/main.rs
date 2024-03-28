@@ -11,7 +11,7 @@ fn main(){
     let path="test.lox";
     let code=fs::read_to_string(path).unwrap();
     let ast=code_to_stblock(&code).unwrap();
-    println!("{:?}",ast);
+    //println!("{:?}",ast);
     let mut stdout=stdout();
     let mut interpreter=Interpreter::new(&mut stdout);
     interpreter.interpret(&ast);

@@ -94,13 +94,16 @@ impl<'a> Token<'a> {
             coloum,
         }
     }
-    pub fn err_token()->Self{
+    pub fn dummy_token(token_type:TokenType)->Self{
         Self{
-            token_type:TokenType::TokenError,
+            token_type,
             lexeme:unsafe{"".as_ascii_str_unchecked()},
             line:0,
             coloum:0,
         }
+    }
+    pub fn err_token()->Self{
+        Self::dummy_token(TokenType::TokenError)
     }
     pub fn get_type(&self) -> TokenType {
         self.token_type
