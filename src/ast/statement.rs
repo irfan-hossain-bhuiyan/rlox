@@ -28,8 +28,8 @@ impl<'a> If<'a> {
         Self { condition, then_b, else_b }
     }
 }
-impl<'a> Stmt for If<'a>{
-    fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>> {
+impl<'a> Stmt<'a> for If<'a>{
+    fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>> {
         let condition=self.condition.evaluate_to_val(env)?;
         if condition.is_truthy(){
             self.then_b.execute(env)?;
@@ -46,8 +46,8 @@ pub struct WhileStmt<'a>{
    body:DynStmt<'a>,
 }
 
-impl<'a> Stmt for WhileStmt<'a> {
-    fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>> {
+impl<'a> Stmt<'a> for WhileStmt<'a> {
+    fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>> {
         while self.condition.evaluate_to_val(env)?.is_truthy(){
             self.body.execute(env)?;
         }
@@ -60,9 +60,9 @@ impl<'a> WhileStmt<'a> {
         Self { condition, body }
     }
 }
-pub type DynStmt<'a>=Box<dyn Stmt+'a>;
-pub trait Stmt: Debug {
-    fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>>;
+pub type DynStmt<'a>=Box<dyn Stmt<'a>+'a>;
+pub trait Stmt<'a>: Debug {
+    fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>>;
 }
 #[derive(Debug, Default)]
 pub struct Block<'a> {
@@ -90,8 +90,8 @@ impl<'a> From<Box<[DynStmt<'a>]>> for Block<'a> {
         Self { source }
     }
 }
-impl<'a> Stmt for Statements<'a> {
-    fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>> {
+impl<'a> Stmt<'a> for Statements<'a> {
+    fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>> {
         for x in self.source.iter() {
             x.execute(env)?
         }
@@ -116,8 +116,8 @@ impl<'a> From<Vec<DynStmt<'a>>> for Block<'a> {
 //        Ok(())
 //    }
 //}
-impl Stmt for Block<'_> {
-    fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>> {
+impl<'a> Stmt<'a> for Block<'a> {
+    fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>> {
         env.create_sub_values();
         for x in self.source.iter() {
             x.execute(env)?
@@ -140,8 +140,23 @@ impl<'a> Var<'a> {
         Self { name, initializer }
     }
 }
-impl Stmt for Var<'_> {
+
+pub struct BuiltinStatement<F>{
+    function:F,
+}
+impl<T> Debug for BuiltinStatement<T>{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"BuiltinStatement")
+    }
+}
+impl<'a,F> Stmt<'a> for BuiltinStatement<F> where F:Fn(&mut Environment){
     fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>> {
+        (self.function)(env);
+        Ok(())
+    }
+}
+impl<'a> Stmt<'a> for Var<'a> {
+    fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>> {
         let val = self.initializer.evaluate_to_val(env)?;
         env.define(self.name.to_string(), val);
         Ok(())
@@ -162,14 +177,14 @@ impl<'a> Print<'a> {
         Self { expression }
     }
 }
-impl Stmt for Expression<'_> {
-    fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>> {
+impl<'a> Stmt<'a> for Expression<'a> {
+    fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>> {
         self.expression.evaluate_to_val(env)?;
         Ok(())
     }
 }
-impl Stmt for Print<'_> {
-    fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>> {
+impl<'a> Stmt<'a> for Print<'a> {
+    fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>> {
         let value = self.expression.evaluate_to_val(env)?;
         env.writeln(&value.to_string())?;
         Ok(())

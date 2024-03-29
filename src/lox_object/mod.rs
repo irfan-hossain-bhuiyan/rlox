@@ -3,14 +3,26 @@ use std::{
     result::Result,
 };
 
-use crate::interpreter::environment::Environment;
+use crate::{ast::statement::Statements, interpreter::environment::Environment};
 #[derive(Debug,Clone)]
-pub enum Object{
-    Value(Values),
+pub enum Object<'a>{
+    Value(Values<'a>),
     Var{name:String},
 }
-impl Object{
-    pub fn into_value(&self,env:&Environment)->Result<Values,String>{
+#[derive(Debug)]
+pub struct LoxFunc<'a>{
+    fn_box:&'a Statements<'a>
+}
+impl LoxFunc<'_>{
+    pub fn call(&self,env:&mut Environment,args:&[Object])->Result<Object,String>{
+        todo!();
+    }
+    pub fn arity(&self)->usize{
+        todo!()
+    }
+}
+impl<'a> Object<'a>{
+    pub fn into_value(&self,env:&Environment<'a>)->Result<Values<'a>,String>{
         let ans=match self{
             Self::Value(x)=>x,
             Self::Var { name }=>match env.get(name){
@@ -21,7 +33,7 @@ impl Object{
         Ok(ans.clone())
     }
 }
-impl Display for Object{
+impl Display for Object<'_>{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Object::Value(x)=>Display::fmt(x, f),
@@ -29,24 +41,25 @@ impl Display for Object{
         }
     }
 }
-impl From<Values> for Object{
-    fn from(value: Values) -> Self {
+impl<'a> From<Values<'a>> for Object<'a>{
+    fn from(value: Values<'a>) -> Self {
         Self::Value(value)
     }
 }
 #[derive(Debug, Clone,)]
-pub enum Values {
+pub enum Values<'a> {
     Str(String),
     Boolean(f64),
     Number(f64),
+    Fn(&'a LoxFunc<'a>),
     Null
 }
-impl From<bool> for Values {
+impl From<bool> for Values<'_> {
     fn from(value: bool) -> Self {
         Self::to_boolean(value)
     }
 }
-impl Display for Values {
+impl Display for Values<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Values::*;
         match self {
@@ -55,11 +68,12 @@ impl Display for Values {
             Boolean(_) => write!(f, "true"),
             Number(x) => write!(f, "{x}"),
             Null=>write!(f,"Null"),
+            Fn(_)=>write!(f,"A function"),
         }
     }
 }
-impl Values {
-    pub fn add(self, rhs: Self) -> Result<Values, String> {
+impl Values<'_> {
+    pub fn add(self, rhs: Self) -> Result<Self, String> {
         use Values::*;
         let ans = match (self, rhs) {
             (Number(x), Number(y)) => Number(x + y),
@@ -106,7 +120,7 @@ impl Values {
         };
         Ok(ans)
     }
-    pub fn eq(&self, rhs: &Self) -> Values {
+    pub fn eq(&self, rhs: &Self) -> Self {
         use Values::*;
         match (self, rhs) {
             (Number(x), Number(y)) => x == y,
@@ -117,7 +131,7 @@ impl Values {
         }
         .into()
     }
-    pub fn neq(&self, rhs: &Self) -> Values {
+    pub fn neq(&self, rhs: &Self) -> Self {
         use Values::*;
         match (self, rhs) {
             (Number(x), Number(y)) => x != y,
@@ -169,20 +183,21 @@ impl Values {
         Ok(ans.into())
     }
     pub fn is_truthy(&self) -> bool {
-        use Values::{Boolean, Number, Str,Null};
+        use Values::{Boolean, Number, Str,Null,Fn};
         match self {
             Boolean(x) | Number(x) => *x != 0.0,
             Str(x) => !x.is_empty(),
             Null=>false,
+            Fn(_)=>true,
         }
     }
     ///Cast a lox value to lox boolean value
-    pub fn cast_to_boolean(&self)->Values{
+    pub fn cast_to_boolean(&self)->Self{
         self.is_truthy().into()
     }   
 
 
-    pub fn negative(&self) -> Result<Values, String> {
+    pub fn negative(&self) -> Result<Self, String> {
         use Values::*;
         let ans = match self {
             Number(x) => Number(-x),
@@ -190,7 +205,7 @@ impl Values {
         };
         Ok(ans)
     }
-    pub fn not(&self) -> Result<Values, String> {
+    pub fn not(&self) -> Result<Self, String> {
         use Values::*;
         if let Boolean(x) = self {
             let boolean_value = match x {
@@ -203,7 +218,7 @@ impl Values {
         }
     }
 
-    pub fn to_boolean<T: Into<f64>>(x: T) -> Values {
+    pub fn to_boolean<T: Into<f64>>(x: T) -> Self {
         let x = x.into();
         if x == 0.0 {
             Self::Boolean(0.0)

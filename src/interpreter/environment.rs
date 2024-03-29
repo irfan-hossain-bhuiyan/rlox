@@ -3,7 +3,7 @@ use std::{collections::{HashMap, VecDeque}, fmt::Debug, io::Write};
 use crate::lox_object::Values;
 
 pub struct Environment<'a> {
-    values: VecDeque<HashMap<String, Values>>,
+    values: VecDeque<HashMap<String, Values<'a>>>,
     stdout: &'a mut dyn Write,
 }
 
@@ -25,24 +25,24 @@ impl<'a> Environment<'a> {
     pub fn delete_sub_values(&mut self){
         self.values.pop_front();
     }
-   pub fn get(&self, name: &str) -> Option<&Values> {
+   pub fn get(&self, name: &str) -> Option<& Values<'a>> {
        for x in self.values.iter(){
             let value=x.get(name);
             if value.is_some(){return value;}
        }
        None
     }
-   fn get_mut(&mut self,name:&str)->Option<&mut Values>{
+   fn get_mut(&mut self,name:&str)->Option<&mut Values<'a>>{
         for x in self.values.iter_mut(){
             let value=x.get_mut(name);
             if value.is_some(){return value;}
         }
         None
    }
-    pub fn define(&mut self, name: String, value: Values) {
+    pub fn define(&mut self, name: String, value: Values<'a>) {
         self.current_block_mut().insert(name,value);
     }
-    pub fn redefine(&mut self, name: &str, value: Values) -> Result<(), String> {
+    pub fn redefine(&mut self, name: &str, value: Values<'a>) -> Result<(), String> {
         match self.get_mut(name){
             Some(x)=>*x=value,
             None=>return Err(format!("variable {} is not defined",name))
@@ -57,10 +57,10 @@ impl<'a> Environment<'a> {
         self.stdout.write_all(b"\n")
     }
 
-    fn current_block(&self) -> &HashMap<String, Values>  {
+    fn current_block(&self) -> &HashMap<String, Values<'a>>  {
         self.values.front().unwrap()
     }
-    fn current_block_mut(&mut self)->&mut HashMap<String,Values>{
+    fn current_block_mut(&mut self)->&mut HashMap<String,Values<'a>>{
         self.values.front_mut().unwrap()
     }
 }

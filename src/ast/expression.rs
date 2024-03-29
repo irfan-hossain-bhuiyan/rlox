@@ -6,13 +6,18 @@ use std::{
     result::Result,
 };
 pub type DynExpr<'a> = Box<dyn Expr<'a> + 'a>;
+
+pub enum ExprMetaData<'tok> {
+    None,
+    Var { token: Token<'tok> },
+}
 pub trait Expr<'tok>: Debug {
-    fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String>;
-    fn evaluate_to_val(&self, env: &mut Environment) -> Result<Values, String> {
+    fn evaluate_to_obj(&self, env: &mut Environment<'tok>) -> Result<Object<'tok>, String>;
+    fn evaluate_to_val(&self, env: &mut Environment<'tok>) -> Result<Values<'tok>, String> {
         self.evaluate_to_obj(env)?.into_value(env)
     }
-    fn is_var(&self) -> Option<Token<'tok>> {
-        None
+    fn metadata(&self) -> ExprMetaData<'tok> {
+        ExprMetaData::None
     }
 }
 #[derive(Debug)]
@@ -22,20 +27,36 @@ pub struct BinaryOp<'a> {
     right: DynExpr<'a>,
 }
 #[derive(Debug)]
-pub struct CallExpr<'a>{
-    callee:DynExpr<'a>,
-    paren:Token<'a>,
-    arguments:Box<[DynExpr<'a>]>
+pub struct CallExpr<'a> {
+    callee: DynExpr<'a>,
+    paren: Token<'a>,
+    arguments: Box<[DynExpr<'a>]>,
 }
 
 impl<'a> CallExpr<'a> {
     pub fn new(callee: DynExpr<'a>, paren: Token<'a>, arguments: Box<[DynExpr<'a>]>) -> Self {
-        Self { callee, paren, arguments }
+        Self {
+            callee,
+            paren,
+            arguments,
+        }
     }
 }
-impl<'a> Expr<'a> for CallExpr<'a>{
-    fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
-        unimplemented!()
+impl<'a> Expr<'a> for CallExpr<'a> {
+    fn evaluate_to_obj(&self, env: &mut Environment<'a>) -> Result<Object<'a>, String> {
+        let callee = self.callee.evaluate_to_val(env)?;
+        let mut arguments = Vec::with_capacity(self.arguments.len());
+        for x in self.arguments.iter() {
+            arguments.push(x.evaluate_to_obj(env)?);
+        }
+        let arguments = arguments.into_boxed_slice();
+        let Values::Fn(function) = callee else {
+            return Err("Can only call function and classes..".into());
+        };
+        if function.arity()!=arguments.len(){
+            return Err("Function have different arguments.".into());
+        }
+        return function.call(env, &arguments);
     }
 }
 
@@ -60,7 +81,7 @@ impl<'a> Logical<'a> {
     }
 }
 impl<'a> Expr<'a> for Logical<'a> {
-    fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
+    fn evaluate_to_obj(&self, env: &mut Environment<'a>) -> Result<Object<'a>, String> {
         let left = self.left.evaluate_to_val(env)?;
         let ans = match (self.operator.get_type(), left.is_truthy()) {
             (TokenType::Or, true) => left,
@@ -80,13 +101,13 @@ impl Display for Variable<'_> {
     }
 }
 impl<'a> Expr<'a> for Variable<'a> {
-    fn evaluate_to_obj(&self, _env: &mut Environment) -> Result<Object, String> {
+    fn evaluate_to_obj(&self, _env: &mut Environment<'a>) -> Result<Object<'a>, String> {
         Ok(Object::Var {
             name: self.name.to_string(),
         })
     }
-    fn is_var(&self) -> Option<Token<'a>> {
-        Some(self.name)
+    fn metadata(&self) -> ExprMetaData<'a> {
+        ExprMetaData::Var { token: self.name }
     }
 }
 impl<'a> Variable<'a> {
@@ -106,7 +127,7 @@ impl<'b> Assign<'b> {
     }
 }
 impl<'b> Expr<'b> for Assign<'b> {
-    fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
+    fn evaluate_to_obj(&self, env: &mut Environment<'b>) -> Result<Object<'b>, String> {
         let value = self.value.evaluate_to_val(env)?;
         env.redefine(self.name.as_str(), value)?;
         Ok(Values::Null.into())
@@ -114,31 +135,30 @@ impl<'b> Expr<'b> for Assign<'b> {
 }
 
 #[derive(Debug)]
-pub struct Value(Object);
-impl From<Object> for Box<dyn Expr<'_>> {
-    fn from(value: Object) -> Self {
+pub struct Value<'a>(Object<'a>);
+impl<'a> From<Object<'a>> for Box<dyn Expr<'a>+'a> {
+    fn from(value: Object<'a>) -> Self {
         Box::new(Value(value))
     }
 }
 
-impl Value {}
-impl From<Object> for Value{
-    fn from(value: Object) -> Self {
+impl<'a> From<Object<'a>> for Value<'a> {
+    fn from(value: Object<'a>) -> Self {
         Value(value)
     }
 }
-impl From<Values> for Box<dyn Expr<'_>>{
-    fn from(value: Values) -> Self {
+impl<'a> From<Values<'a>> for Box<dyn Expr<'a>+'a> {
+    fn from(value: Values<'a>) -> Self {
         Box::new(Value(value.into()))
     }
 }
-impl Display for Value {
+impl Display for Value<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.0, f)
     }
 }
-impl Expr<'_> for Value {
-    fn evaluate_to_obj(&self, _env: &mut Environment) -> Result<Object, String> {
+impl<'a> Expr<'a> for Value<'a> {
+    fn evaluate_to_obj(&self, _env: &mut Environment<'a>) -> Result<Object<'a>, String> {
         Ok(self.0.clone())
     }
 }
@@ -185,8 +205,8 @@ impl<'a> Unary<'a> {
         Self { operator, right }
     }
 }
-impl Expr<'_> for BinaryOp<'_> {
-    fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
+impl<'a> Expr<'a> for BinaryOp<'a> {
+    fn evaluate_to_obj(&self, env: &mut Environment<'a>) -> Result<Object<'a>, String> {
         let left = self.left.evaluate_to_val(env)?;
         let right = self.right.evaluate_to_val(env)?;
         use TokenType::{
@@ -208,13 +228,13 @@ impl Expr<'_> for BinaryOp<'_> {
         .map(|x| x.into())
     }
 }
-impl Expr<'_> for Grouping<'_> {
-    fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
+impl<'a> Expr<'a> for Grouping<'a> {
+    fn evaluate_to_obj(&self, env: &mut Environment<'a>) -> Result<Object<'a>, String> {
         self.expression.evaluate_to_obj(env)
     }
 }
-impl Expr<'_> for Literal<'_> {
-    fn evaluate_to_obj(&self, _env: &mut Environment) -> Result<Object, String> {
+impl<'a> Expr<'a> for Literal<'_> {
+    fn evaluate_to_obj(&self, _env: &mut Environment<'a>) -> Result<Object<'a>, String> {
         use TokenType::{False, Number, String, True};
         let ans = match self.token_type() {
             String => Values::Str(self.token.to_string()),
@@ -226,15 +246,16 @@ impl Expr<'_> for Literal<'_> {
         Ok(ans.into())
     }
 }
-impl Expr<'_> for Unary<'_> {
-    fn evaluate_to_obj(&self, env: &mut Environment) -> Result<Object, String> {
-        let right = self.right.evaluate_to_val(env)?;
+impl<'a> Expr<'a> for Unary<'a> {
+    fn evaluate_to_obj(&self, env: &mut Environment<'a>) -> Result<Object<'a>, String> {
+        let right:Values<'a> = self.right.evaluate_to_val(env)?;
         use TokenType::*;
-        match self.operator.get_type() {
+        let values = match self.operator.get_type() {
             Minus => right.negative(),
             Bang => right.cast_to_boolean().not(),
             _ => Err("Other operator is not allowed".into()),
-        }
+        };
+        values
         .map(|x| x.into())
     }
 }

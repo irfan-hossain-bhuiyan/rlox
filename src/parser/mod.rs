@@ -3,7 +3,7 @@ use std::{error::Error, fmt::Display, mem::take};
 use crate::{
     ast::{
         expression::{
-            Assign, BinaryOp, CallExpr, DynExpr, Expr, Grouping, Literal, Logical, Unary, Value, Variable
+            Assign, BinaryOp, CallExpr, DynExpr, Expr, ExprMetaData, Grouping, Literal, Logical, Unary, Value, Variable
         },
         statement::{Block, DynStmt, Expression, If, Print, Stmt, Var, WhileStmt},
     },
@@ -49,7 +49,7 @@ pub struct ParserError<'a> {
 }
 impl Error for ParserError<'_> {}
 pub type ParserErrors<'b> = Errors<ParserError<'b>>;
-type Stmts<'b> = Box<[Box<dyn Stmt + 'b>]>;
+type Stmts<'b> = Box<[Box<dyn Stmt<'b> + 'b>]>;
 type Result<'b> = std::result::Result<Stmts<'b>, ParserErrors<'b>>;
 impl Display for ParserError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -116,10 +116,13 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         let expr = self.or();
         if self.match_withs(&[TokenType::Equal]) {
             let right = self.assignment();
-            let name = expr.is_var().unwrap_or_else(|| {
-                self.error(ParserErrorType::MissingVariable);
-                Token::err_token()
-            });
+            let name = match expr.metadata(){
+                ExprMetaData::Var { token }=>token,
+                ExprMetaData::None=>{
+                    self.error(ParserErrorType::MissingVariable);
+                    Token::err_token()
+                }
+            };
             return Box::new(Assign::new(name, right));
         }
         expr
@@ -242,11 +245,12 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
     fn consume(&mut self, token_type: TokenType, error_type: ParserErrorType) -> Token<'b> {
         if self.is_at_end() || !self.match_withs(&[token_type]) {
             self.error(error_type);
+            return Token::err_token();
         }
         self.previous_token()
     }
 
-    fn statement(&mut self) -> Box<dyn Stmt + 'b> {
+    fn statement(&mut self) -> Box<dyn Stmt<'b> + 'b> {
         if self.match_withs(&[TokenType::Print]) {
             return self.print_statement();
         }
@@ -265,26 +269,26 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         self.expression_statement()
     }
 
-    fn print_statement(&mut self) -> Box<dyn Stmt + 'b> {
+    fn print_statement(&mut self) -> Box<dyn Stmt<'b> + 'b> {
         let expr = self.expression();
         self.consume(TokenType::Semicolon, ParserErrorType::MissingSemicolon);
         Box::new(Print::new(expr))
     }
 
-    fn expression_statement(&mut self) -> Box<dyn Stmt + 'b> {
+    fn expression_statement(&mut self) -> Box<dyn Stmt<'b> + 'b> {
         let expr = self.expression();
         self.consume(TokenType::Semicolon, ParserErrorType::MissingSemicolon);
         return Box::new(Expression::new(expr));
     }
 
-    fn declaration(&mut self) -> Box<dyn Stmt + 'b> {
+    fn declaration(&mut self) -> Box<dyn Stmt<'b> + 'b> {
         if self.match_withs(&[TokenType::Var]) {
             return self.var_declaration();
         }
         self.statement()
     }
 
-    fn var_declaration(&mut self) -> Box<dyn Stmt + 'b> {
+    fn var_declaration(&mut self) -> Box<dyn Stmt<'b> + 'b> {
         let name = self.consume(TokenType::Identifier, ParserErrorType::InvalidAssignment);
         let initilizer = if self.match_withs(&[TokenType::Equal]) {
             self.expression()
@@ -312,7 +316,7 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         Some(take(&mut self.errors).into())
     }
 
-    fn block_statement(&mut self) -> Box<dyn Stmt + 'b> {
+    fn block_statement(&mut self) -> DynStmt<'b> {
         let mut statements: Vec<Box<dyn Stmt>> = Vec::new();
         while !self.checks(&[TokenType::RightBrace]) && !self.is_eof() {
             statements.push(self.declaration());
