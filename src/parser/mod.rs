@@ -17,7 +17,7 @@ pub struct Parser<'a, 'b: 'a> {
     index: usize,
     errors: Vec<ParserError<'b>>,
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy,PartialEq)]
 enum ParserErrorType {
     MissingSemicolon,
     InvalidAssignment,
@@ -97,10 +97,10 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
     /// As for now it just parse expression.
     pub fn parse(&mut self) -> Result<'b> {
         let mut statements: Vec<Box<dyn Stmt>> = Vec::new();
-        while !self.is_at_end() {
-            if self.match_withs(&[TokenType::Eof]) {
-                break;
-            }
+        while !self.is_eof() {
+            //if self.match_withs(&[TokenType::Eof]) {
+            //    break;
+            //}
             statements.push(self.declaration());
         }
         match self.get_errors() {
@@ -229,6 +229,13 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         }
         self.index += 1;
     }
+    ///Eof means end of file.
+    fn is_eof(&self) -> bool {
+        match self.current_token(){
+            None=>true,
+            Some(x)=>x.match_token(&TokenType::Eof),
+        }
+    }   
     fn is_at_end(&self) -> bool {
         self.source.len() <= self.index
     }
@@ -291,6 +298,11 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
     fn error(&mut self, error_type: ParserErrorType) {
         self.errors
             .push(ParserError::new(self.current_token().unwrap(), error_type));
+       // if error_type==ParserErrorType::MissingValue{
+       //     self.advance();
+       // }
+        
+        self.recovery();
     }
 
     fn get_errors(&mut self) -> Option<ParserErrors<'b>> {
@@ -302,7 +314,7 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
 
     fn block_statement(&mut self) -> Box<dyn Stmt + 'b> {
         let mut statements: Vec<Box<dyn Stmt>> = Vec::new();
-        while !self.checks(&[TokenType::RightBrace]) && !self.is_at_end() {
+        while !self.checks(&[TokenType::RightBrace]) && !self.is_eof() {
             statements.push(self.declaration());
         }
         self.consume(TokenType::RightBrace, ParserErrorType::MissingRightBrace);
@@ -421,7 +433,7 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         if !self.check(TokenType::RightParen) {
             loop {
                 arguments.push(self.expression());
-                if self.match_with(TokenType::Comma) {
+                if ! self.match_with(TokenType::Comma) {
                     break;
                 }
             }
@@ -429,5 +441,14 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
 
         let paren = self.consume(TokenType::Semicolon, ParserErrorType::MissingSemicolon);
         return Box::new(CallExpr::new(callee, paren, arguments.into()));
+    }
+
+    fn recovery(&mut self)   {
+        use TokenType::*;
+        loop{
+            if self.checks(&[LeftBrace,While,Var,For]) || self.is_eof(){break;}
+            if self.checks(&[Semicolon]){self.advance();break;}
+            self.advance();
+        }
     }
 }
