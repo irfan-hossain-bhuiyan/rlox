@@ -2,7 +2,7 @@ use std::{
     error::Error, fmt::{Debug, Display}, rc::Rc, result::Result
 };
 
-use crate::{ast::{expression::DynExpr, statement::{DynStmt, Statements, Stmt}}, interpreter::environment::Environment, token::Token};
+use crate::interpreter::environment::Environment;
 //#[derive(Debug,Clone)]
 //pub enum Object<'a>{
 //    Value(Values<'a>),
@@ -34,7 +34,7 @@ use crate::{ast::{expression::DynExpr, statement::{DynStmt, Statements, Stmt}}, 
 //    }
 //}
 pub trait LoxFunc:Debug{
-    fn call(&self,env:&mut Environment)->Result<Values,Box<dyn Error>>;
+    fn call(&self,env:&mut Environment,args:&[Values])->Result<Values,Box<dyn Error>>;
     fn arity(&self)->usize;
 }
  

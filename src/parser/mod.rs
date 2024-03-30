@@ -8,7 +8,7 @@ use crate::{
         statement::{Block, DynStmt, Expression, If, Print, Stmt, Var, WhileStmt},
     },
     lox_error::Errors,
-    lox_object::{ Values},
+    lox_object::Values,
     token::{Token, TokenType},
 };
 #[derive(Debug, Clone)]
