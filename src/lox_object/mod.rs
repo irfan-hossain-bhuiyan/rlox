@@ -1,32 +1,13 @@
 use std::{
-    error::Error, fmt::Display, result::Result
+    error::Error, fmt::{Debug, Display}, rc::Rc, result::Result
 };
 
-use crate::{ast::statement::{Statements, Stmt}, interpreter::environment::Environment, token::Token};
+use crate::{ast::{expression::DynExpr, statement::{DynStmt, Statements, Stmt}}, interpreter::environment::Environment, token::Token};
 //#[derive(Debug,Clone)]
 //pub enum Object<'a>{
 //    Value(Values<'a>),
 //    Var{name:String},
 //}
-#[derive(Debug)]
-pub struct LoxFunc<'a>{
-    argument_names:&'a[Token<'a>],
-    fn_box:&'a Statements<'a>
-}
-impl<'a> LoxFunc<'a>{
-    pub fn call(&self,env:&mut Environment<'a>,args:&[Values<'a>])->Result<Values,Box<dyn Error>>{
-        env.create_sub_values();
-        for (x,y) in self.argument_names.iter().zip(args){
-            env.define(x.to_string(), y.to_owned());
-        }
-        self.fn_box.execute(env)?;
-        env.delete_sub_values();
-        return Ok(Values::Null);
-    }
-    pub fn arity(&self)->usize{
-        self.argument_names.len()
-    }
-}
 //impl<'a> Object<'a>{
 //    pub fn into_value(&self,env:&Environment<'a>)->Result<Values<'a>,String>{
 //        let ans=match self{
@@ -52,20 +33,25 @@ impl<'a> LoxFunc<'a>{
 //        Self::Value(value)
 //    }
 //}
+pub trait LoxFunc:Debug{
+    fn call(&self,env:&mut Environment)->Result<Values,Box<dyn Error>>;
+    fn arity(&self)->usize;
+}
+ 
 #[derive(Debug, Clone,)]
-pub enum Values<'a> {
+pub enum Values {
     Str(String),
     Boolean(f64),
     Number(f64),
-    Fn(&'a LoxFunc<'a>),
+    Fn(Rc<dyn LoxFunc>),
     Null
 }
-impl From<bool> for Values<'_> {
+impl From<bool> for Values {
     fn from(value: bool) -> Self {
         Self::to_boolean(value)
     }
 }
-impl Display for Values<'_> {
+impl Display for Values {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Values::*;
         match self {
@@ -78,7 +64,7 @@ impl Display for Values<'_> {
         }
     }
 }
-impl Values<'_> {
+impl Values {
     pub fn add(self, rhs: Self) -> Result<Self, String> {
         use Values::*;
         let ans = match (self, rhs) {

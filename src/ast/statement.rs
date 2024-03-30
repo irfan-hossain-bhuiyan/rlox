@@ -141,20 +141,6 @@ impl<'a> Var<'a> {
     }
 }
 
-pub struct BuiltinStatement<F>{
-    function:F,
-}
-impl<T> Debug for BuiltinStatement<T>{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,"BuiltinStatement")
-    }
-}
-impl<'a,F> Stmt<'a> for BuiltinStatement<F> where F:Fn(&mut Environment){
-    fn execute(&self, env: &mut Environment) -> Result<(), Box<dyn Error>> {
-        (self.function)(env);
-        Ok(())
-    }
-}
 impl<'a> Stmt<'a> for Var<'a> {
     fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>> {
         let val = self.initializer.evaluate_to_val(env)?;
