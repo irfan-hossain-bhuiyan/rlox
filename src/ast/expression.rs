@@ -1,6 +1,7 @@
 use crate::interpreter::environment::Environment;
-use crate::lox_object::{Object, Values};
+use crate::lox_object::{ Values};
 use crate::token::{Token, TokenType};
+use std::error::Error;
 use std::{
     fmt::{Debug, Display},
     result::Result,
@@ -12,10 +13,10 @@ pub enum ExprMetaData<'tok> {
     Var { token: Token<'tok> },
 }
 pub trait Expr<'tok>: Debug {
-    fn evaluate_to_obj(&self, env: &mut Environment<'tok>) -> Result<Object<'tok>, String>;
-    fn evaluate_to_val(&self, env: &mut Environment<'tok>) -> Result<Values<'tok>, String> {
-        self.evaluate_to_obj(env)?.into_value(env)
-    }
+//    fn evaluate_to_obj(&self, env: &mut Environment<'tok>) -> Result<Object<'tok>, String>;
+    fn evaluate_to_val(&self, env: &mut Environment<'tok>) -> Result<Values<'tok>, Box<dyn Error>> ;
+//        self.evaluate_to_obj(env)?.into_value(env)
+//    }
     fn metadata(&self) -> ExprMetaData<'tok> {
         ExprMetaData::None
     }
@@ -43,11 +44,11 @@ impl<'a> CallExpr<'a> {
     }
 }
 impl<'a> Expr<'a> for CallExpr<'a> {
-    fn evaluate_to_obj(&self, env: &mut Environment<'a>) -> Result<Object<'a>, String> {
+    fn evaluate_to_val(&self, env: &mut Environment<'a>) -> Result<Values<'a>, Box<dyn Error>> {
         let callee = self.callee.evaluate_to_val(env)?;
         let mut arguments = Vec::with_capacity(self.arguments.len());
         for x in self.arguments.iter() {
-            arguments.push(x.evaluate_to_obj(env)?);
+            arguments.push(x.evaluate_to_val(env)?);
         }
         let arguments = arguments.into_boxed_slice();
         let Values::Fn(function) = callee else {
@@ -81,7 +82,7 @@ impl<'a> Logical<'a> {
     }
 }
 impl<'a> Expr<'a> for Logical<'a> {
-    fn evaluate_to_obj(&self, env: &mut Environment<'a>) -> Result<Object<'a>, String> {
+    fn evaluate_to_val(&self, env: &mut Environment<'a>) -> Result<Values<'a>,Box<dyn Error>> {
         let left = self.left.evaluate_to_val(env)?;
         let ans = match (self.operator.get_type(), left.is_truthy()) {
             (TokenType::Or, true) => left,
@@ -91,7 +92,7 @@ impl<'a> Expr<'a> for Logical<'a> {
             }
             _ => panic!("There shoudn't be other toekn."),
         };
-        return Ok(ans.into());
+        return Ok(ans);
     }
 }
 
@@ -101,10 +102,8 @@ impl Display for Variable<'_> {
     }
 }
 impl<'a> Expr<'a> for Variable<'a> {
-    fn evaluate_to_obj(&self, _env: &mut Environment<'a>) -> Result<Object<'a>, String> {
-        Ok(Object::Var {
-            name: self.name.to_string(),
-        })
+    fn evaluate_to_val(&self, env: &mut Environment<'a>) -> Result<Values<'a>,Box<dyn Error>> {
+        env.get(self.name.as_str()).ok_or("Variable not defined.".into()).cloned()
     }
     fn metadata(&self) -> ExprMetaData<'a> {
         ExprMetaData::Var { token: self.name }
@@ -127,38 +126,34 @@ impl<'b> Assign<'b> {
     }
 }
 impl<'b> Expr<'b> for Assign<'b> {
-    fn evaluate_to_obj(&self, env: &mut Environment<'b>) -> Result<Object<'b>, String> {
+    fn evaluate_to_val(&self, env: &mut Environment<'b>) -> Result<Values<'b>, Box<dyn Error>> {
         let value = self.value.evaluate_to_val(env)?;
         env.redefine(self.name.as_str(), value)?;
-        Ok(Values::Null.into())
+        Ok(Values::Null)
     }
 }
 
 #[derive(Debug)]
-pub struct Value<'a>(Object<'a>);
-impl<'a> From<Object<'a>> for Box<dyn Expr<'a>+'a> {
-    fn from(value: Object<'a>) -> Self {
-        Box::new(Value(value))
+pub struct ValueStmt<'a>(Values<'a>);
+impl<'a> From<Values<'a>> for Box<dyn Expr<'a>+'a> {
+    fn from(value:Values<'a>) -> Self {
+        Box::new(ValueStmt(value))
     }
 }
 
-impl<'a> From<Object<'a>> for Value<'a> {
-    fn from(value: Object<'a>) -> Self {
-        Value(value)
-    }
-}
-impl<'a> From<Values<'a>> for Box<dyn Expr<'a>+'a> {
+impl<'a> From<Values<'a>> for ValueStmt<'a> {
     fn from(value: Values<'a>) -> Self {
-        Box::new(Value(value.into()))
+        ValueStmt(value)
     }
 }
-impl Display for Value<'_> {
+
+impl Display for ValueStmt<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.0, f)
     }
 }
-impl<'a> Expr<'a> for Value<'a> {
-    fn evaluate_to_obj(&self, _env: &mut Environment<'a>) -> Result<Object<'a>, String> {
+impl<'a> Expr<'a> for ValueStmt<'a> {
+    fn evaluate_to_val(&self, _env: &mut Environment<'a>) -> Result<Values<'a>,Box<dyn Error>> {
         Ok(self.0.clone())
     }
 }
@@ -206,13 +201,13 @@ impl<'a> Unary<'a> {
     }
 }
 impl<'a> Expr<'a> for BinaryOp<'a> {
-    fn evaluate_to_obj(&self, env: &mut Environment<'a>) -> Result<Object<'a>, String> {
+    fn evaluate_to_val(&self, env: &mut Environment<'a>) -> Result<Values<'a>,Box<dyn Error>> {
         let left = self.left.evaluate_to_val(env)?;
         let right = self.right.evaluate_to_val(env)?;
         use TokenType::{
             BangEqual, EqualEqual, Greater, GreaterEqual, Less, LessEqual, Minus, Plus, Slash, Star,
         };
-        match self.operator.get_type() {
+        let ans=match self.operator.get_type() {
             Minus => left.sub(right),
             Plus => left.add(right),
             Star => left.mul(right),
@@ -224,17 +219,17 @@ impl<'a> Expr<'a> for BinaryOp<'a> {
             EqualEqual => Ok(left.eq(&right)),
             BangEqual => Ok(left.neq(&right)),
             _ => Err("mismatched type sin binary operation.".into()),
-        }
-        .map(|x| x.into())
+        }?;
+        Ok(ans)
     }
 }
 impl<'a> Expr<'a> for Grouping<'a> {
-    fn evaluate_to_obj(&self, env: &mut Environment<'a>) -> Result<Object<'a>, String> {
-        self.expression.evaluate_to_obj(env)
+    fn evaluate_to_val(&self, env: &mut Environment<'a>) -> Result<Values<'a>,Box<dyn Error>> {
+        self.expression.evaluate_to_val(env)
     }
 }
 impl<'a> Expr<'a> for Literal<'_> {
-    fn evaluate_to_obj(&self, _env: &mut Environment<'a>) -> Result<Object<'a>, String> {
+    fn evaluate_to_val(&self, _env: &mut Environment<'a>) -> Result<Values<'a>,Box<dyn Error>> {
         use TokenType::{False, Number, String, True};
         let ans = match self.token_type() {
             String => Values::Str(self.token.to_string()),
@@ -243,19 +238,18 @@ impl<'a> Expr<'a> for Literal<'_> {
             False => Values::Boolean(0.0),
             _ => return Err("Unexpected value,wanted boolean,number or string".into()),
         };
-        Ok(ans.into())
+        Ok(ans)
     }
 }
 impl<'a> Expr<'a> for Unary<'a> {
-    fn evaluate_to_obj(&self, env: &mut Environment<'a>) -> Result<Object<'a>, String> {
+    fn evaluate_to_val(&self, env: &mut Environment<'a>) -> Result<Values<'a>,Box<dyn Error>> {
         let right:Values<'a> = self.right.evaluate_to_val(env)?;
         use TokenType::*;
-        let values = match self.operator.get_type() {
+        let ans=match self.operator.get_type() {
             Minus => right.negative(),
             Bang => right.cast_to_boolean().not(),
             _ => Err("Other operator is not allowed".into()),
-        };
-        values
-        .map(|x| x.into())
+        }?;
+        Ok(ans)
     }
 }

@@ -1,51 +1,57 @@
 use std::{
-    fmt::Display,
-    result::Result,
+    error::Error, fmt::Display, result::Result
 };
 
-use crate::{ast::statement::Statements, interpreter::environment::Environment};
-#[derive(Debug,Clone)]
-pub enum Object<'a>{
-    Value(Values<'a>),
-    Var{name:String},
-}
+use crate::{ast::statement::{Statements, Stmt}, interpreter::environment::Environment, token::Token};
+//#[derive(Debug,Clone)]
+//pub enum Object<'a>{
+//    Value(Values<'a>),
+//    Var{name:String},
+//}
 #[derive(Debug)]
 pub struct LoxFunc<'a>{
+    argument_names:&'a[Token<'a>],
     fn_box:&'a Statements<'a>
 }
-impl LoxFunc<'_>{
-    pub fn call(&self,env:&mut Environment,args:&[Object])->Result<Object,String>{
-        todo!();
+impl<'a> LoxFunc<'a>{
+    pub fn call(&self,env:&mut Environment<'a>,args:&[Values<'a>])->Result<Values,Box<dyn Error>>{
+        env.create_sub_values();
+        for (x,y) in self.argument_names.iter().zip(args){
+            env.define(x.to_string(), y.to_owned());
+        }
+        self.fn_box.execute(env)?;
+        env.delete_sub_values();
+        return Ok(Values::Null);
     }
     pub fn arity(&self)->usize{
-        todo!()
+        self.argument_names.len()
     }
 }
-impl<'a> Object<'a>{
-    pub fn into_value(&self,env:&Environment<'a>)->Result<Values<'a>,String>{
-        let ans=match self{
-            Self::Value(x)=>x,
-            Self::Var { name }=>match env.get(name){
-                Some(x)=>x,
-                None=>return Err("Variable not found.".to_owned())
-            },
-        };
-        Ok(ans.clone())
-    }
-}
-impl Display for Object<'_>{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Object::Value(x)=>Display::fmt(x, f),
-            Object::Var { name }=>Display::fmt(name, f),
-        }
-    }
-}
-impl<'a> From<Values<'a>> for Object<'a>{
-    fn from(value: Values<'a>) -> Self {
-        Self::Value(value)
-    }
-}
+//impl<'a> Object<'a>{
+//    pub fn into_value(&self,env:&Environment<'a>)->Result<Values<'a>,String>{
+//        let ans=match self{
+//            Self::Value(x)=>x,
+//            Self::Var { name }=>match env.get(name){
+//                Some(x)=>x,
+//                None=>return Err("Variable not found.".to_owned())
+//            },
+//        };
+//        Ok(ans.clone())
+//    }
+//}
+//impl Display for Object<'_>{
+//    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//        match self {
+//            Object::Value(x)=>Display::fmt(x, f),
+//            Object::Var { name }=>Display::fmt(name, f),
+//        }
+//    }
+//}
+//impl<'a> From<Values<'a>> for Object<'a>{
+//    fn from(value: Values<'a>) -> Self {
+//        Self::Value(value)
+//    }
+//}
 #[derive(Debug, Clone,)]
 pub enum Values<'a> {
     Str(String),

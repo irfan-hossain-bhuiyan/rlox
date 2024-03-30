@@ -3,12 +3,12 @@ use std::{error::Error, fmt::Display, mem::take};
 use crate::{
     ast::{
         expression::{
-            Assign, BinaryOp, CallExpr, DynExpr, Expr, ExprMetaData, Grouping, Literal, Logical, Unary, Value, Variable
+            Assign, BinaryOp, CallExpr, DynExpr, Expr, ExprMetaData, Grouping, Literal, Logical, Unary, ValueStmt, Variable
         },
         statement::{Block, DynStmt, Expression, If, Print, Stmt, Var, WhileStmt},
     },
     lox_error::Errors,
-    lox_object::{Object, Values},
+    lox_object::{ Values},
     token::{Token, TokenType},
 };
 #[derive(Debug, Clone)]
@@ -208,7 +208,7 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
             return Box::new(Grouping::new(expr));
         }
         self.error(ParserErrorType::MissingValue);
-        Box::new(Value::from(Object::Value(Values::Null)))
+        Box::new(ValueStmt::from(Values::Null))
     }
     fn match_withs(&mut self, token_types: &[TokenType]) -> bool {
         let Some(current_token) = self.current_token() else {
@@ -293,7 +293,7 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         let initilizer = if self.match_withs(&[TokenType::Equal]) {
             self.expression()
         } else {
-            Into::<Object>::into(Values::Null).into()
+            Values::Null.into()
         };
         self.consume(TokenType::Semicolon, ParserErrorType::MissingSemicolon);
         Box::new(Var::new(name, initilizer))
