@@ -1,6 +1,7 @@
 use std::{
     error::Error, fmt::{Debug, Display}, rc::Rc, result::Result
 };
+pub mod builtinfunction;
 
 use crate::interpreter::environment::Environment;
 //#[derive(Debug,Clone)]

@@ -1,5 +1,1 @@
-var a=10;
-{for x in 10{
-	print("It should not work");
-}
-}
+print("aasa");

@@ -153,26 +153,26 @@ impl<'a> Expression<'a> {
         Self { expression }
     }
 }
-#[derive(Debug)]
-pub struct Print<'a> {
-    expression: Box<dyn Expr<'a> + 'a>,
-}
-
-impl<'a> Print<'a> {
-    pub fn new(expression: Box<dyn Expr<'a> + 'a>) -> Self {
-        Self { expression }
-    }
-}
+//#[derive(Debug)]
+//pub struct Print<'a> {
+//    expression: Box<dyn Expr<'a> + 'a>,
+//}
+//
+//impl<'a> Print<'a> {
+//    pub fn new(expression: Box<dyn Expr<'a> + 'a>) -> Self {
+//        Self { expression }
+//    }
+//}
 impl<'a> Stmt<'a> for Expression<'a> {
     fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>> {
         self.expression.evaluate_to_val(env)?;
         Ok(())
     }
 }
-impl<'a> Stmt<'a> for Print<'a> {
-    fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>> {
-        let value = self.expression.evaluate_to_val(env)?;
-        env.writeln(&value.to_string())?;
-        Ok(())
-    }
-}
+//impl<'a> Stmt<'a> for Print<'a> {
+//    fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>> {
+//        let value = self.expression.evaluate_to_val(env)?;
+//        env.writeln(&value.to_string())?;
+//        Ok(())
+//    }
+//}

@@ -87,7 +87,7 @@ impl<'a> Expr<'a> for Logical<'a> {
         let ans = match (self.operator.get_type(), left.is_truthy()) {
             (TokenType::Or, true) => left,
             (TokenType::And, false) => left,
-            (x, y) if matches!(x, TokenType::Or | TokenType::And) => {
+            (x, _y) if matches!(x, TokenType::Or | TokenType::And) => {
                 self.right.evaluate_to_val(env)?
             }
             _ => panic!("There shoudn't be other toekn."),

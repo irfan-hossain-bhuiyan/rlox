@@ -1,6 +1,6 @@
-use std::{collections::{HashMap, VecDeque}, fmt::Debug, io::Write};
+use std::{collections::{HashMap, VecDeque}, fmt::Debug, io::Write, rc::Rc, time::Instant};
 
-use crate::lox_object::Values;
+use crate::lox_object::{builtinfunction::{ClockFunc, PrintFunc}, Values};
 
 pub struct Environment<'a> {
     values: VecDeque<HashMap<String, Values>>,
@@ -14,10 +14,12 @@ impl Debug for Environment<'_> {
 }
 impl<'a> Environment<'a> {
     pub(super) fn new(stdout: &'a mut dyn Write) -> Self {
-        Self {
+        let mut output=Self {
             values: VecDeque::new(),
             stdout,
-        }
+        };
+        output.include_globals();
+        output
     }
     pub fn create_sub_values(&mut self){
         self.values.push_front(HashMap::new());
@@ -62,6 +64,13 @@ impl<'a> Environment<'a> {
     }
     fn current_block_mut(&mut self)->&mut HashMap<String,Values>{
         self.values.front_mut().unwrap()
+    }
+
+    fn include_globals(&mut self)  {
+        self.create_sub_values();
+        self.define("print".to_owned(), Values::Fn(Rc::new(PrintFunc)));
+        let clock_timer=ClockFunc::new();
+        self.define("clock".to_owned(), Values::Fn(Rc::new(clock_timer)));
     }
 }
 #[macro_export]

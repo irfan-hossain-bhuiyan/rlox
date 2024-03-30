@@ -5,7 +5,7 @@ use crate::{
         expression::{
             Assign, BinaryOp, CallExpr, DynExpr, Expr, ExprMetaData, Grouping, Literal, Logical, Unary, ValueStmt, Variable
         },
-        statement::{Block, DynStmt, Expression, If, Print, Stmt, Var, WhileStmt},
+        statement::{Block, DynStmt, Expression, If, Stmt, Var, WhileStmt},
     },
     lox_error::Errors,
     lox_object::Values,
@@ -251,9 +251,9 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
     }
 
     fn statement(&mut self) -> Box<dyn Stmt<'b> + 'b> {
-        if self.match_withs(&[TokenType::Print]) {
-            return self.print_statement();
-        }
+        //if self.match_withs(&[TokenType::Print]) {
+        //    return self.print_statement();
+        //}
         if self.match_withs(&[TokenType::If]) {
             return self.if_statement();
         }
@@ -269,11 +269,11 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         self.expression_statement()
     }
 
-    fn print_statement(&mut self) -> Box<dyn Stmt<'b> + 'b> {
-        let expr = self.expression();
-        self.consume(TokenType::Semicolon, ParserErrorType::MissingSemicolon);
-        Box::new(Print::new(expr))
-    }
+   // fn print_statement(&mut self) -> Box<dyn Stmt<'b> + 'b> {
+   //     let expr = self.expression();
+   //     self.consume(TokenType::Semicolon, ParserErrorType::MissingSemicolon);
+   //     Box::new(Print::new(expr))
+   // }
 
     fn expression_statement(&mut self) -> Box<dyn Stmt<'b> + 'b> {
         let expr = self.expression();
@@ -443,7 +443,7 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
             }
         }
 
-        let paren = self.consume(TokenType::Semicolon, ParserErrorType::MissingSemicolon);
+        let paren = self.consume(TokenType::RightParen, ParserErrorType::MissingRightParen);
         return Box::new(CallExpr::new(callee, paren, arguments.into()));
     }
 
