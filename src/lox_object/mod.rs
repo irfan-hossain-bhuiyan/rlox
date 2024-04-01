@@ -3,14 +3,14 @@ use std::{
 };
 pub mod builtinfunction;
 
-use crate::interpreter::environment::Environment;
+use crate::{ast::statement::{self, FunctionDelc, Stmt}, interpreter::environment::Environment};
 //#[derive(Debug,Clone)]
 //pub enum Object<'a>{
-//    Value(Values<'a>),
+//    Value(Values<'_><'a>),
 //    Var{name:String},
 //}
 //impl<'a> Object<'a>{
-//    pub fn into_value(&self,env:&Environment<'a>)->Result<Values<'a>,String>{
+//    pub fn into_value(&self,env:&Environment<'a>)->Result<Values<'_><'a>,String>{
 //        let ans=match self{
 //            Self::Value(x)=>x,
 //            Self::Var { name }=>match env.get(name){
@@ -29,30 +29,29 @@ use crate::interpreter::environment::Environment;
 //        }
 //    }
 //}
-//impl<'a> From<Values<'a>> for Object<'a>{
-//    fn from(value: Values<'a>) -> Self {
+//impl<'a> From<Values<'_><'a>> for Object<'a>{
+//    fn from(value: Values<'_><'a>) -> Self {
 //        Self::Value(value)
 //    }
 //}
-pub trait LoxFunc:Debug{
-    fn call(&self,env:&mut Environment,args:&[Values])->Result<Values,Box<dyn Error>>;
-    fn arity(&self)->usize;
+pub trait LoxCallable<'a>:Debug{
+    fn call(&self,env:&mut Environment<'a>,args:&[Values<'a>])->Result<Values<'a>,Box<dyn Error>>;
+    fn arity(&self,input_number:usize)->bool;
 }
- 
 #[derive(Debug, Clone,)]
-pub enum Values {
+pub enum Values<'a> {
     Str(String),
     Boolean(f64),
     Number(f64),
-    Fn(Rc<dyn LoxFunc>),
+    Fn(Rc<dyn LoxCallable<'a>+'a>),
     Null
 }
-impl From<bool> for Values {
+impl From<bool> for Values<'_> {
     fn from(value: bool) -> Self {
         Self::to_boolean(value)
     }
 }
-impl Display for Values {
+impl Display for Values<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Values::*;
         match self {
@@ -65,7 +64,36 @@ impl Display for Values {
         }
     }
 }
-impl Values {
+#[derive(Debug)]
+pub struct LoxFunction<'a>{
+    declaration:&'a FunctionDelc<'a>
+}
+impl<'a> LoxFunction<'a> {
+    pub fn new(declaration:&'a FunctionDelc<'a>) -> Self {
+        Self { declaration }
+    }
+    fn set_arguments(&self,env:&mut Environment<'a> ,args: &[Values<'a>])  {
+        for (paran,args) in self.declaration.params().iter().zip(args){
+            env.define(paran.to_string(), args.clone());
+        }
+    }
+}
+impl<'a> LoxCallable<'a> for LoxFunction<'a>{
+    fn call(&self,env:&mut Environment<'a>,args:&[Values<'a>])->Result<Values<'a>,Box<dyn Error>> {
+        env.create_sub_values();
+        self.set_arguments(env,args);
+        let return_value=self.declaration.body().execute(env)?;
+        env.delete_sub_values();
+        if let Some(return_value)=return_value{
+            return Ok(return_value);
+        }
+        return Ok(Values::Null);
+    }
+    fn arity(&self,input_number:usize)->bool {
+        input_number==self.declaration.params().len()
+    }
+}
+impl Values<'_> {
     pub fn add(self, rhs: Self) -> Result<Self, String> {
         use Values::*;
         let ans = match (self, rhs) {

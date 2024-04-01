@@ -14,7 +14,7 @@ pub enum ExprMetaData<'tok> {
 }
 pub trait Expr<'tok>: Debug {
 //    fn evaluate_to_obj(&self, env: &mut Environment<'tok>) -> Result<Object<'tok>, String>;
-    fn evaluate_to_val(&self, env: &mut Environment) -> Result<Values, Box<dyn Error>> ;
+    fn evaluate_to_val(&self, env: &mut Environment<'tok>) -> Result<Values<'tok>, Box<dyn Error>> ;
 //        self.evaluate_to_obj(env)?.into_value(env)
 //    }
     fn metadata(&self) -> ExprMetaData<'tok> {
@@ -44,7 +44,7 @@ impl<'a> CallExpr<'a> {
     }
 }
 impl<'a> Expr<'a> for CallExpr<'a> {
-    fn evaluate_to_val(&self, env: &mut Environment) -> Result<Values, Box<dyn Error>> {
+    fn evaluate_to_val(&self, env: &mut Environment<'a>) -> Result<Values<'a>, Box<dyn Error>> {
         let callee = self.callee.evaluate_to_val(env)?;
         let mut arguments = Vec::with_capacity(self.arguments.len());
         for x in self.arguments.iter() {
@@ -54,7 +54,7 @@ impl<'a> Expr<'a> for CallExpr<'a> {
         let Values::Fn(function) = callee else {
             return Err("Can only call function and classes..".into());
         };
-        if function.arity()!=arguments.len(){
+        if !function.arity(arguments.len()){
             return Err("Function have different arguments.".into());
         }
         return function.call(env, &arguments);
@@ -82,7 +82,7 @@ impl<'a> Logical<'a> {
     }
 }
 impl<'a> Expr<'a> for Logical<'a> {
-    fn evaluate_to_val(&self, env: &mut Environment) -> Result<Values,Box<dyn Error>> {
+    fn evaluate_to_val(&self, env: &mut Environment<'a>) -> Result<Values<'a>,Box<dyn Error>> {
         let left = self.left.evaluate_to_val(env)?;
         let ans = match (self.operator.get_type(), left.is_truthy()) {
             (TokenType::Or, true) => left,
@@ -102,7 +102,7 @@ impl Display for Variable<'_> {
     }
 }
 impl<'a> Expr<'a> for Variable<'a> {
-    fn evaluate_to_val(&self, env: &mut Environment) -> Result<Values,Box<dyn Error>> {
+    fn evaluate_to_val(&self, env: &mut Environment<'a>) -> Result<Values<'a>,Box<dyn Error>> {
         env.get(self.name.as_str()).ok_or("Variable not defined.".into()).cloned()
     }
     fn metadata(&self) -> ExprMetaData<'a> {
@@ -126,7 +126,7 @@ impl<'b> Assign<'b> {
     }
 }
 impl<'b> Expr<'b> for Assign<'b> {
-    fn evaluate_to_val(&self, env: &mut Environment) -> Result<Values, Box<dyn Error>> {
+    fn evaluate_to_val(&self, env: &mut Environment<'b>) -> Result<Values<'b>, Box<dyn Error>> {
         let value = self.value.evaluate_to_val(env)?;
         env.redefine(self.name.as_str(), value)?;
         Ok(Values::Null)
@@ -134,26 +134,26 @@ impl<'b> Expr<'b> for Assign<'b> {
 }
 
 #[derive(Debug)]
-pub struct ValueStmt(Values);
-impl<'a> From<Values> for Box<dyn Expr<'a>+'a> {
-    fn from(value:Values) -> Self {
+pub struct ValueStmt<'a>(Values<'a>);
+impl<'a> From<Values<'a>> for Box<dyn Expr<'a>+'a> {
+    fn from(value:Values<'a>) -> Self {
         Box::new(ValueStmt(value))
     }
 }
 
-impl<'a> From<Values> for ValueStmt {
-    fn from(value: Values) -> Self {
+impl<'a> From<Values<'a>> for ValueStmt<'a> {
+    fn from(value: Values<'a>) -> Self {
         ValueStmt(value)
     }
 }
 
-impl Display for ValueStmt {
+impl Display for ValueStmt<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.0, f)
     }
 }
-impl<'a> Expr<'a> for ValueStmt {
-    fn evaluate_to_val(&self, _env: &mut Environment) -> Result<Values,Box<dyn Error>> {
+impl<'a> Expr<'a> for ValueStmt<'a> {
+    fn evaluate_to_val(&self, _env: &mut Environment) -> Result<Values<'a>,Box<dyn Error>> {
         Ok(self.0.clone())
     }
 }
@@ -201,7 +201,7 @@ impl<'a> Unary<'a> {
     }
 }
 impl<'a> Expr<'a> for BinaryOp<'a> {
-    fn evaluate_to_val(&self, env: &mut Environment) -> Result<Values,Box<dyn Error>> {
+    fn evaluate_to_val(&self, env: &mut Environment<'a>) -> Result<Values<'a>,Box<dyn Error>> {
         let left = self.left.evaluate_to_val(env)?;
         let right = self.right.evaluate_to_val(env)?;
         use TokenType::{
@@ -224,12 +224,12 @@ impl<'a> Expr<'a> for BinaryOp<'a> {
     }
 }
 impl<'a> Expr<'a> for Grouping<'a> {
-    fn evaluate_to_val(&self, env: &mut Environment) -> Result<Values,Box<dyn Error>> {
+    fn evaluate_to_val(&self, env: &mut Environment<'a>) -> Result<Values<'a>,Box<dyn Error>> {
         self.expression.evaluate_to_val(env)
     }
 }
 impl<'a> Expr<'a> for Literal<'_> {
-    fn evaluate_to_val(&self, _env: &mut Environment) -> Result<Values,Box<dyn Error>> {
+    fn evaluate_to_val(&self, _env: &mut Environment) -> Result<Values<'a>,Box<dyn Error>> {
         use TokenType::{False, Number, String, True};
         let ans = match self.token_type() {
             String => Values::Str(self.token.to_string()),
@@ -242,7 +242,7 @@ impl<'a> Expr<'a> for Literal<'_> {
     }
 }
 impl<'a> Expr<'a> for Unary<'a> {
-    fn evaluate_to_val(&self, env: &mut Environment) -> Result<Values,Box<dyn Error>> {
+    fn evaluate_to_val(&self, env: &mut Environment<'a>) -> Result<Values<'a>,Box<dyn Error>> {
         let right:Values = self.right.evaluate_to_val(env)?;
         use TokenType::*;
         let ans=match self.operator.get_type() {

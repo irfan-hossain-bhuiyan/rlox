@@ -1,10 +1,9 @@
-use std::{
-    error::Error,
-    fmt::Debug,
-};
 ///program → declaration* EOF ;
-///declaration → varDecl  | statement ;
+///declaration → varDecl  | statement |funDelc;
 ///statement → exprStmt  | printStmt |  Block | ifStmt | whileStmt | forStmt;
+///funDecl → "fun" function ;
+///function → IDENTIFIER "(" parameters? ")" block ;
+///parameters → IDENTIFIER ( "," IDENTIFIER )* ;
 ///whileStmt → "while" "(" expression ")" statement ;
 ///Block -> "{" declaration* "}"
 ///varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
@@ -13,45 +12,83 @@ use std::{
 ///assignment → IDENTIFIER "=" assignment  | logic_or ;
 ///logic_or → logic_and ( "or" logic_and )* ;
 ///logic_and → equality ( "and" equality )* ;
-use crate::{ast::expression::Expr, interpreter::environment::Environment, token::Token};
+use crate::{
+    ast::expression::Expr, interpreter::environment::Environment, lox_object::{LoxFunction, Values}, token::Token,
+};
+use std::{error::Error, fmt::Debug, rc::Rc};
 
 use super::expression::DynExpr;
 #[derive(Debug)]
-pub struct If<'a>{
-    condition:DynExpr<'a>,
-    then_b:DynStmt<'a>,
-    else_b:Option<DynStmt<'a>>,
+pub struct If<'a> {
+    condition: DynExpr<'a>,
+    then_b: DynStmt<'a>,
+    else_b: Option<DynStmt<'a>>,
+}
+#[derive(Debug)]
+pub struct FunctionDelc<'a>{
+    name:Token<'a>,
+    params:Box<[Token<'a>]>,
+    body:DynStmt<'a>,
 }
 
-impl<'a> If<'a> {
-    pub fn new(condition: DynExpr<'a>, then_b: DynStmt<'a>, else_b: Option<DynStmt<'a>>) -> Self {
-        Self { condition, then_b, else_b }
+impl<'a> FunctionDelc<'a> {
+    pub fn new(name: Token<'a>, params: Box<[Token<'a>]>, body:DynStmt<'a>) -> Self {
+        Self { name, params, body }
+    }
+
+    pub fn params(&self) -> &[Token<'_>] {
+        &self.params
+    }
+
+    pub fn body(&self) -> &DynStmt<'a> {
+        &self.body
     }
 }
-impl<'a> Stmt<'a> for If<'a>{
-    fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>> {
-        let condition=self.condition.evaluate_to_val(env)?;
-        if condition.is_truthy(){
-            self.then_b.execute(env)?;
+impl<'a> Stmt<'a> for FunctionDelc<'a>{
+    fn execute(&'a self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
+        env.define(self.name.to_string(),Values::Fn(Rc::new(LoxFunction::new(self))));
+        Ok(None)
+    }
+}
+impl<'a> If<'a> {
+    pub fn new(condition: DynExpr<'a>, then_b: DynStmt<'a>, else_b: Option<DynStmt<'a>>) -> Self {
+        Self {
+            condition,
+            then_b,
+            else_b,
         }
-        else if let Some(x)=self.else_b.as_ref() {
-            x.execute(env)?;
+    }
+}
+impl<'a> Stmt<'a> for If<'a> {
+    fn execute(&'a self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
+        let condition = self.condition.evaluate_to_val(env)?;
+        if condition.is_truthy() {
+            let ans = self.then_b.execute(env)?;
+            if let Some(x) = ans {
+                return Ok(Some(x));
+            }
+        } else if let Some(x) = self.else_b.as_ref() {
+            if let Some(x) = x.execute(env)? {
+                return Ok(Some(x));
+            }
         }
-        Ok(())
+        Ok(None)
     }
 }
 #[derive(Debug)]
-pub struct WhileStmt<'a>{
-   condition:DynExpr<'a>,
-   body:DynStmt<'a>,
+pub struct WhileStmt<'a> {
+    condition: DynExpr<'a>,
+    body: DynStmt<'a>,
 }
 
 impl<'a> Stmt<'a> for WhileStmt<'a> {
-    fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>> {
-        while self.condition.evaluate_to_val(env)?.is_truthy(){
-            self.body.execute(env)?;
+    fn execute(&'a self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
+        while self.condition.evaluate_to_val(env)?.is_truthy() {
+            if let Some(x) = self.body.execute(env)? {
+                return Ok(Some(x));
+            }
         }
-        Ok(())
+        Ok(None)
     }
 }
 
@@ -60,9 +97,9 @@ impl<'a> WhileStmt<'a> {
         Self { condition, body }
     }
 }
-pub type DynStmt<'a>=Box<dyn Stmt<'a>+'a>;
+pub type DynStmt<'a> = Box<dyn Stmt<'a> + 'a>;
 pub trait Stmt<'a>: Debug {
-    fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>>;
+    fn execute(&'a self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>>;
 }
 #[derive(Debug, Default)]
 pub struct Block<'a> {
@@ -91,21 +128,27 @@ impl<'a> From<Box<[DynStmt<'a>]>> for Block<'a> {
     }
 }
 impl<'a> Stmt<'a> for Statements<'a> {
-    fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>> {
+    fn execute(&'a self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
         for x in self.source.iter() {
-            x.execute(env)?
+            if let Some(x) = x.execute(env)? {
+                return Ok(Some(x));
+            }
         }
-        Ok(())
+        Ok(None)
     }
 }
 impl<'a> From<Vec<DynStmt<'a>>> for Statements<'a> {
     fn from(value: Vec<DynStmt<'a>>) -> Self {
-        Self{source:value.into()}
+        Self {
+            source: value.into(),
+        }
     }
 }
 impl<'a> From<Vec<DynStmt<'a>>> for Block<'a> {
     fn from(value: Vec<DynStmt<'a>>) -> Self {
-        Self{source:value.into()}
+        Self {
+            source: value.into(),
+        }
     }
 }
 //impl Display for Block<'_>{
@@ -117,13 +160,15 @@ impl<'a> From<Vec<DynStmt<'a>>> for Block<'a> {
 //    }
 //}
 impl<'a> Stmt<'a> for Block<'a> {
-    fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>> {
+    fn execute(&'a self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
         env.create_sub_values();
         for x in self.source.iter() {
-            x.execute(env)?
+            if let Some(x) = x.execute(env)? {
+                return Ok(Some(x));
+            }
         }
         env.delete_sub_values();
-        Ok(())
+        Ok(None)
     }
 }
 #[derive(Debug)]
@@ -142,10 +187,10 @@ impl<'a> Var<'a> {
 }
 
 impl<'a> Stmt<'a> for Var<'a> {
-    fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>> {
+    fn execute(&'a self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
         let val = self.initializer.evaluate_to_val(env)?;
         env.define(self.name.to_string(), val);
-        Ok(())
+        Ok(None)
     }
 }
 impl<'a> Expression<'a> {
@@ -164,9 +209,12 @@ impl<'a> Expression<'a> {
 //    }
 //}
 impl<'a> Stmt<'a> for Expression<'a> {
-    fn execute(&self, env: &mut Environment<'a>) -> Result<(), Box<dyn Error>> {
+    fn execute(
+        &'a self,
+        env: &mut Environment<'a>,
+    ) -> Result<Option<Values<'a>>, Box<dyn Error>> {
         self.expression.evaluate_to_val(env)?;
-        Ok(())
+        Ok(None)
     }
 }
 //impl<'a> Stmt<'a> for Print<'a> {

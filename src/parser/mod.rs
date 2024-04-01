@@ -3,9 +3,10 @@ use std::{error::Error, fmt::Display, mem::take};
 use crate::{
     ast::{
         expression::{
-            Assign, BinaryOp, CallExpr, DynExpr, Expr, ExprMetaData, Grouping, Literal, Logical, Unary, ValueStmt, Variable
+            Assign, BinaryOp, CallExpr, DynExpr, Expr, ExprMetaData, Grouping, Literal, Logical,
+            Unary, ValueStmt, Variable,
         },
-        statement::{Block, DynStmt, Expression, If, Stmt, Var, WhileStmt},
+        statement::{Block, DynStmt, Expression, FunctionDelc, If, Stmt, Var, WhileStmt},
     },
     lox_error::Errors,
     lox_object::Values,
@@ -17,7 +18,7 @@ pub struct Parser<'a, 'b: 'a> {
     index: usize,
     errors: Vec<ParserError<'b>>,
 }
-#[derive(Debug, Clone, Copy,PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum ParserErrorType {
     MissingSemicolon,
     InvalidAssignment,
@@ -27,6 +28,7 @@ enum ParserErrorType {
     MissingRightBrace,
     MissingLeftParen,
     MissingLeftBrace,
+    MissingIdentifier(&'static str),
 }
 impl ParserErrorType {
     fn to_str(&self) -> &'static str {
@@ -39,6 +41,7 @@ impl ParserErrorType {
             Self::MissingVariable => "Variable not found",
             Self::MissingRightBrace => "Right Brace \"}\" is missing",
             Self::MissingLeftBrace => "Left Brace \"{\" is missing",
+            Self::MissingIdentifier(x)=>"Missing Identifier"
         }
     }
 }
@@ -116,9 +119,9 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         let expr = self.or();
         if self.match_withs(&[TokenType::Equal]) {
             let right = self.assignment();
-            let name = match expr.metadata(){
-                ExprMetaData::Var { token }=>token,
-                ExprMetaData::None=>{
+            let name = match expr.metadata() {
+                ExprMetaData::Var { token } => token,
+                ExprMetaData::None => {
                     self.error(ParserErrorType::MissingVariable);
                     Token::err_token()
                 }
@@ -234,11 +237,11 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
     }
     ///Eof means end of file.
     fn is_eof(&self) -> bool {
-        match self.current_token(){
-            None=>true,
-            Some(x)=>x.match_token(&TokenType::Eof),
+        match self.current_token() {
+            None => true,
+            Some(x) => x.match_token(&TokenType::Eof),
         }
-    }   
+    }
     fn is_at_end(&self) -> bool {
         self.source.len() <= self.index
     }
@@ -269,11 +272,11 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         self.expression_statement()
     }
 
-   // fn print_statement(&mut self) -> Box<dyn Stmt<'b> + 'b> {
-   //     let expr = self.expression();
-   //     self.consume(TokenType::Semicolon, ParserErrorType::MissingSemicolon);
-   //     Box::new(Print::new(expr))
-   // }
+    // fn print_statement(&mut self) -> Box<dyn Stmt<'b> + 'b> {
+    //     let expr = self.expression();
+    //     self.consume(TokenType::Semicolon, ParserErrorType::MissingSemicolon);
+    //     Box::new(Print::new(expr))
+    // }
 
     fn expression_statement(&mut self) -> Box<dyn Stmt<'b> + 'b> {
         let expr = self.expression();
@@ -282,6 +285,9 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
     }
 
     fn declaration(&mut self) -> Box<dyn Stmt<'b> + 'b> {
+        if self.match_with(TokenType::Fun) {
+            return self.function("function");
+        }
         if self.match_withs(&[TokenType::Var]) {
             return self.var_declaration();
         }
@@ -302,10 +308,10 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
     fn error(&mut self, error_type: ParserErrorType) {
         self.errors
             .push(ParserError::new(self.current_token().unwrap(), error_type));
-       // if error_type==ParserErrorType::MissingValue{
-       //     self.advance();
-       // }
-        
+        // if error_type==ParserErrorType::MissingValue{
+        //     self.advance();
+        // }
+
         self.recovery();
     }
 
@@ -437,7 +443,7 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         if !self.check(TokenType::RightParen) {
             loop {
                 arguments.push(self.expression());
-                if ! self.match_with(TokenType::Comma) {
+                if !self.match_with(TokenType::Comma) {
                     break;
                 }
             }
@@ -447,12 +453,42 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
         return Box::new(CallExpr::new(callee, paren, arguments.into()));
     }
 
-    fn recovery(&mut self)   {
+    fn recovery(&mut self) {
         use TokenType::*;
-        loop{
-            if self.checks(&[LeftBrace,While,Var,For]) || self.is_eof(){break;}
-            if self.checks(&[Semicolon]){self.advance();break;}
+        loop {
+            if self.checks(&[LeftBrace, While, Var, For]) || self.is_eof() {
+                break;
+            }
+            if self.checks(&[Semicolon]) {
+                self.advance();
+                break;
+            }
             self.advance();
         }
+    }
+
+    fn function(&mut self, name: &'static str) -> DynStmt<'b> {
+        let name = self.consume(
+            TokenType::Identifier,
+            ParserErrorType::MissingIdentifier(name),
+        );
+        self.consume(TokenType::LeftParen, ParserErrorType::MissingLeftParen);
+        let mut parameters = Vec::new();
+        if !self.check(TokenType::RightParen) {
+            loop {
+                parameters.push(self.consume(
+                    TokenType::Identifier,
+                    ParserErrorType::MissingIdentifier("function input parameter."),
+                ));
+                if !self.match_with(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+        let parameter=parameters.into_boxed_slice();
+        self.consume(TokenType::RightParen, ParserErrorType::MissingRightParen);
+        self.consume(TokenType::LeftBrace, ParserErrorType::MissingLeftBrace);
+        let body = self.block_statement();
+        return Box::new(FunctionDelc::new(name,parameter,body));
     }
 }

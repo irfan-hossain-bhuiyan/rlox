@@ -3,7 +3,7 @@ use std::{collections::{HashMap, VecDeque}, fmt::Debug, io::Write, rc::Rc, time:
 use crate::lox_object::{builtinfunction::{ClockFunc, PrintFunc}, Values};
 
 pub struct Environment<'a> {
-    values: VecDeque<HashMap<String, Values>>,
+    values: VecDeque<HashMap<String, Values<'a>>>,
     stdout: &'a mut dyn Write,
 }
 
@@ -27,24 +27,24 @@ impl<'a> Environment<'a> {
     pub fn delete_sub_values(&mut self){
         self.values.pop_front();
     }
-   pub fn get(&self, name: &str) -> Option<& Values> {
+   pub fn get(&self, name: &str) -> Option<& Values<'a>> {
        for x in self.values.iter(){
             let value=x.get(name);
             if value.is_some(){return value;}
        }
        None
     }
-   fn get_mut(&mut self,name:&str)->Option<&mut Values>{
+   fn get_mut(&mut self,name:&str)->Option<&mut Values<'a>>{
         for x in self.values.iter_mut(){
             let value=x.get_mut(name);
             if value.is_some(){return value;}
         }
         None
    }
-    pub fn define(&mut self, name: String, value: Values) {
+    pub fn define(&mut self, name: String, value: Values<'a>) {
         self.current_block_mut().insert(name,value);
     }
-    pub fn redefine(&mut self, name: &str, value: Values) -> Result<(), String> {
+    pub fn redefine(&mut self, name: &str, value: Values<'a>) -> Result<(), String> {
         match self.get_mut(name){
             Some(x)=>*x=value,
             None=>return Err(format!("variable {} is not defined",name))
@@ -54,21 +54,26 @@ impl<'a> Environment<'a> {
     pub fn contains(&self, name: &str) -> bool {
         self.get(name).is_some()
     }
+    pub fn write(&mut self,output: &str) -> Result<(), std::io::Error> {
+        self.stdout.write_all(output.as_bytes())?;
+        Ok(())
+    }
     pub fn writeln(&mut self, output: &str) -> Result<(), std::io::Error> {
         self.stdout.write_all(output.as_bytes())?;
-        self.stdout.write_all(b"\n")
+        self.stdout.write_all(b"\n")?;
+        Ok(())
     }
 
-    fn current_block(&self) -> &HashMap<String, Values>  {
+    fn current_block(&self) -> &HashMap<String, Values<'a>>  {
         self.values.front().unwrap()
     }
-    fn current_block_mut(&mut self)->&mut HashMap<String,Values>{
+    fn current_block_mut(&mut self)->&mut HashMap<String,Values<'a>>{
         self.values.front_mut().unwrap()
     }
 
     fn include_globals(&mut self)  {
         self.create_sub_values();
-        self.define("print".to_owned(), Values::Fn(Rc::new(PrintFunc)));
+        self.define("print".to_owned(), Values::<'a>::Fn(Rc::new(PrintFunc)));
         let clock_timer=ClockFunc::new();
         self.define("clock".to_owned(), Values::Fn(Rc::new(clock_timer)));
     }
