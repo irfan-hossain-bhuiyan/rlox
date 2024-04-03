@@ -1,9 +1,16 @@
 use std::{
-    error::Error, fmt::{Debug, Display}, rc::Rc, result::Result
+    error::Error,
+    fmt::{Debug, Display},
+    rc::Rc,
+    result::Result,
 };
 pub mod builtinfunction;
 
-use crate::{ast::statement::{self, FunctionDelc, Stmt}, interpreter::environment::Environment};
+use crate::{
+    ast::statement::{self, DynStmt, FunctionDelc, Stmt},
+    interpreter::environment::Environment,
+    token::Token,
+};
 //#[derive(Debug,Clone)]
 //pub enum Object<'a>{
 //    Value(Values<'_><'a>),
@@ -34,17 +41,21 @@ use crate::{ast::statement::{self, FunctionDelc, Stmt}, interpreter::environment
 //        Self::Value(value)
 //    }
 //}
-pub trait LoxCallable<'a>:Debug{
-    fn call(&self,env:&mut Environment<'a>,args:&[Values<'a>])->Result<Values<'a>,Box<dyn Error>>;
-    fn arity(&self,input_number:usize)->bool;
+pub trait LoxCallable<'a>: Debug {
+    fn call(
+        &self,
+        env: &mut Environment<'a>,
+        args: &[Values<'a>],
+    ) -> Result<Values<'a>, Box<dyn Error>>;
+    fn arity(&self, input_number: usize) -> bool;
 }
-#[derive(Debug, Clone,)]
+#[derive(Debug, Clone)]
 pub enum Values<'a> {
     Str(String),
     Boolean(f64),
     Number(f64),
-    Fn(Rc<dyn LoxCallable<'a>+'a>),
-    Null
+    Fn(Rc<dyn LoxCallable<'a> + 'a>),
+    Null,
 }
 impl From<bool> for Values<'_> {
     fn from(value: bool) -> Self {
@@ -55,42 +66,53 @@ impl Display for Values<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Values::*;
         match self {
-            Str(x) => Display::fmt(x,f),
+            Str(x) => Display::fmt(x, f),
             Boolean(0.0) => write!(f, "false"),
             Boolean(_) => write!(f, "true"),
             Number(x) => write!(f, "{x}"),
-            Null=>write!(f,"Null"),
-            Fn(_)=>write!(f,"A function"),
+            Null => write!(f, "Null"),
+            Fn(_) => write!(f, "A function"),
         }
     }
 }
 #[derive(Debug)]
-pub struct LoxFunction<'a>{
-    declaration:&'a FunctionDelc<'a>
+pub struct LoxFunction<'a> {
+    name: Token<'a>,
+    paren: Box<[Token<'a>]>,
+    body: DynStmt<'a>,
 }
 impl<'a> LoxFunction<'a> {
-    pub fn new(declaration:&'a FunctionDelc<'a>) -> Self {
-        Self { declaration }
+    pub fn new(name: Token<'a>, paren: Box<[Token<'a>]>, body: DynStmt<'a>) -> Self {
+        Self { name, paren, body }
     }
-    fn set_arguments(&self,env:&mut Environment<'a> ,args: &[Values<'a>])  {
-        for (paran,args) in self.declaration.params().iter().zip(args){
+
+    fn set_arguments(&self, env: &mut Environment<'a>, args: &[Values<'a>]) {
+        for (paran, args) in self.paren.iter().zip(args) {
             env.define(paran.to_string(), args.clone());
         }
     }
+
+    pub fn name(&self) -> &'a str {
+        self.name.as_str()
+    }
 }
-impl<'a> LoxCallable<'a> for LoxFunction<'a>{
-    fn call(&self,env:&mut Environment<'a>,args:&[Values<'a>])->Result<Values<'a>,Box<dyn Error>> {
+impl<'a> LoxCallable<'a> for LoxFunction<'a> {
+    fn call(
+        &self,
+        env: &mut Environment<'a>,
+        args: &[Values<'a>],
+    ) -> Result<Values<'a>, Box<dyn Error>> {
         env.create_sub_values();
-        self.set_arguments(env,args);
-        let return_value=self.declaration.body().execute(env)?;
+        self.set_arguments(env, args);
+        let return_value = self.body.execute(env)?;
         env.delete_sub_values();
-        if let Some(return_value)=return_value{
+        if let Some(return_value) = return_value {
             return Ok(return_value);
         }
         return Ok(Values::Null);
     }
-    fn arity(&self,input_number:usize)->bool {
-        input_number==self.declaration.params().len()
+    fn arity(&self, input_number: usize) -> bool {
+        input_number == self.paren.len()
     }
 }
 impl Values<'_> {
@@ -98,12 +120,12 @@ impl Values<'_> {
         use Values::*;
         let ans = match (self, rhs) {
             (Number(x), Number(y)) => Number(x + y),
-            (Number(x),Str(y))=>Str(x.to_string()+&y),
+            (Number(x), Str(y)) => Str(x.to_string() + &y),
             (Number(x), Boolean(y)) => Number(x + y),
             (Boolean(x), Number(y)) => Number(x + y),
             (Boolean(x), Boolean(y)) => Number(x + y),
             (Str(x), Str(y)) => Str(x + &y),
-            (Str(x),Number(y))=>Str(x+&y.to_string()),
+            (Str(x), Number(y)) => Str(x + &y.to_string()),
             (s, r) => return Err(format!("Can't add {} and {}", s, r)),
         };
         Ok(ans)
@@ -147,7 +169,7 @@ impl Values<'_> {
             (Number(x), Number(y)) => x == y,
             (Boolean(x), Boolean(y)) => x == y,
             (Str(x), Str(y)) => x == y,
-            (Null,Null)=>true,
+            (Null, Null) => true,
             _ => false,
         }
         .into()
@@ -158,7 +180,7 @@ impl Values<'_> {
             (Number(x), Number(y)) => x != y,
             (Boolean(x), Boolean(y)) => x != y,
             (Str(x), Str(y)) => x != y,
-            (Null,Null)=>false,
+            (Null, Null) => false,
             _ => true,
         }
         .into()
@@ -204,19 +226,18 @@ impl Values<'_> {
         Ok(ans.into())
     }
     pub fn is_truthy(&self) -> bool {
-        use Values::{Boolean, Number, Str,Null,Fn};
+        use Values::{Boolean, Fn, Null, Number, Str};
         match self {
             Boolean(x) | Number(x) => *x != 0.0,
             Str(x) => !x.is_empty(),
-            Null=>false,
-            Fn(_)=>true,
+            Null => false,
+            Fn(_) => true,
         }
     }
     ///Cast a lox value to lox boolean value
-    pub fn cast_to_boolean(&self)->Self{
+    pub fn cast_to_boolean(&self) -> Self {
         self.is_truthy().into()
-    }   
-
+    }
 
     pub fn negative(&self) -> Result<Self, String> {
         use Values::*;
@@ -248,4 +269,3 @@ impl Values<'_> {
         }
     }
 }
-

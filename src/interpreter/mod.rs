@@ -16,7 +16,7 @@ impl<'a> Interpreter<'a>{
             env:Environment::new(stdout),
         }
     }
-    pub fn interpret(&mut self, statement:&dyn Stmt<'a>){
+    pub fn interpret(&mut self, statement:& dyn Stmt<'a>){
         if let Err(x)=statement.execute(&mut self.env){
             emit_error(x.deref());
         }

@@ -9,7 +9,7 @@ use crate::{
         statement::{Block, DynStmt, Expression, FunctionDelc, If, Stmt, Var, WhileStmt},
     },
     lox_error::Errors,
-    lox_object::Values,
+    lox_object::{LoxFunction, Values},
     token::{Token, TokenType},
 };
 #[derive(Debug, Clone)]
@@ -41,7 +41,7 @@ impl ParserErrorType {
             Self::MissingVariable => "Variable not found",
             Self::MissingRightBrace => "Right Brace \"}\" is missing",
             Self::MissingLeftBrace => "Left Brace \"{\" is missing",
-            Self::MissingIdentifier(x)=>"Missing Identifier"
+            Self::MissingIdentifier(x) => "Missing Identifier",
         }
     }
 }
@@ -88,7 +88,7 @@ impl<'a, 'b: 'a> From<&'a [Token<'b>]> for Parser<'a, 'b> {
     }
 }
 
-impl<'a, 'b: 'b> Parser<'a, 'b> {
+impl<'a, 'b: 'a> Parser<'a, 'b> {
     pub fn new(source: &'a [Token<'b>]) -> Self {
         Self {
             source,
@@ -485,10 +485,10 @@ impl<'a, 'b: 'b> Parser<'a, 'b> {
                 }
             }
         }
-        let parameter=parameters.into_boxed_slice();
+        let parameter = parameters.into_boxed_slice();
         self.consume(TokenType::RightParen, ParserErrorType::MissingRightParen);
         self.consume(TokenType::LeftBrace, ParserErrorType::MissingLeftBrace);
         let body = self.block_statement();
-        return Box::new(FunctionDelc::new(name,parameter,body));
+        return Box::new(FunctionDelc::from(LoxFunction::new(name, parameter, body)));
     }
 }

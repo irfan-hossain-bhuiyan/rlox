@@ -13,7 +13,7 @@ impl Debug for Environment<'_> {
     }
 }
 impl<'a> Environment<'a> {
-    pub(super) fn new(stdout: &'a mut dyn Write) -> Self {
+    pub fn new(stdout: &'a mut dyn Write) -> Self {
         let mut output=Self {
             values: VecDeque::new(),
             stdout,
