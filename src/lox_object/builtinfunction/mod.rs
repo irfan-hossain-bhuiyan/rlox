@@ -34,8 +34,8 @@ impl<'a> LoxCallable<'a> for ClockFunc {
         env: &mut crate::interpreter::environment::Environment,
         _args: &[super::Values],
     ) -> Result<super::Values<'a>, Box<dyn std::error::Error>> {
-        env.writeln(format!("Time passed {} seconds",self.0.elapsed().as_secs_f64()).as_str())?;
-        Ok(super::Values::Null)
+        let second=self.0.elapsed().as_secs_f64();
+        Ok(super::Values::Number(second))
     }
     fn arity(&self,args_num:usize) -> bool {
         args_num==0

@@ -1,1 +1,13 @@
-print("aasa");
+fun summation(a,b){
+	var sum=0;
+	var start=clock();
+	for(var i=a;i<=b;i=i+1){
+		sum=sum+i;
+	}
+	var end=clock();
+	print("Time took ",end-start,"second");
+	print("Ans is ",sum);
+}
+summation(0,10);
+summation(0,100);
+

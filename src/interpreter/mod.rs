@@ -13,7 +13,7 @@ pub struct Interpreter<'input>{
 impl<'a> Interpreter<'a>{
     pub fn new(stdout:&'a mut dyn Write)->Self{
         Self{
-            env:Environment::new(stdout),
+            env:Environment::global_env(stdout),
         }
     }
     pub fn interpret(&mut self, statement:& dyn Stmt<'a>){

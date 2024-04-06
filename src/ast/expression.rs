@@ -103,7 +103,14 @@ impl Display for Variable<'_> {
 }
 impl<'a> Expr<'a> for Variable<'a> {
     fn evaluate_to_val(&self, env: &mut Environment<'a>) -> Result<Values<'a>,Box<dyn Error>> {
-        env.get(self.name.as_str()).ok_or("Variable not defined.".into()).cloned()
+        match env.get(self.name.as_str()){
+            Some(x)=>Ok(x),
+            None=>{
+                let mut err=self.name.to_string();
+                err.push_str(" Variable not declared.");
+                Err(err.into())
+            },
+        }
     }
     fn metadata(&self) -> ExprMetaData<'a> {
         ExprMetaData::Var { token: self.name }
