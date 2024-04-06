@@ -9,7 +9,7 @@ fn main() {
         Some(x) => x.as_str(),
         None => "",
     };
-    let path = "test.lox";
+    let path = "tst2.lox";
     let code = fs::read_to_string(path).unwrap();
 
     let mut interpreter = Interpreter::new(&mut stdout);

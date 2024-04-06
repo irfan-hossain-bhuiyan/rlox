@@ -6,7 +6,7 @@ use crate::{
             Assign, BinaryOp, CallExpr, DynExpr, Expr, ExprMetaData, Grouping, Literal, Logical,
             Unary, ValueStmt, Variable,
         },
-        statement::{Block, DynStmt, Expression, FunctionDelc, If, Stmt, Var, WhileStmt},
+        statement::{Block, DynStmt, Expression, FunctionDelc, If, ReturnStmt, Stmt, Var, WhileStmt},
     },
     lox_error::Errors,
     lox_object::{LoxFunction, Values},
@@ -260,14 +260,17 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         if self.match_withs(&[TokenType::If]) {
             return self.if_statement();
         }
-        if self.match_with(TokenType::While) {
+        else if self.match_with(TokenType::While) {
             return self.while_statement();
         }
-        if self.match_withs(&[TokenType::LeftBrace]) {
+        else if self.match_withs(&[TokenType::LeftBrace]) {
             return self.block_statement();
         }
-        if self.match_with(TokenType::For) {
+        else if self.match_with(TokenType::For) {
             return self.for_statement();
+        }
+        else if self.match_with(TokenType::Return){
+            return self.return_statement();
         }
         self.expression_statement()
     }
@@ -490,5 +493,11 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         self.consume(TokenType::LeftBrace, ParserErrorType::MissingLeftBrace);
         let body = self.block_statement();
         return Box::new(FunctionDelc::from(LoxFunction::new(name, parameter, body)));
+    }
+
+    fn return_statement(&mut self) -> DynStmt<'b> {
+        let return_expr=self.expression();
+        self.consume(TokenType::Semicolon, ParserErrorType::MissingSemicolon);
+        Box::new(ReturnStmt::from(return_expr))
     }
 }

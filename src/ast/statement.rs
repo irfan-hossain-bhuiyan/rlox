@@ -48,6 +48,21 @@ impl<'a> If<'a> {
         }
     }
 }
+#[derive(Debug)]
+pub struct ReturnStmt<'a>{
+    expr:DynExpr<'a>
+}
+impl<'a> From<DynExpr<'a>> for ReturnStmt<'a>{
+    fn from(value: DynExpr<'a>) -> Self {
+        Self{expr:value}
+    }
+}
+impl<'a> Stmt<'a> for ReturnStmt<'a>{
+    fn execute(& self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
+        let value=self.expr.evaluate_to_val(env)?;
+        return Ok(Some(value));
+    }
+}
 impl<'a> Stmt<'a> for If<'a> {
     fn execute(&self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
         let condition = self.condition.evaluate_to_val(env)?;
