@@ -7,8 +7,8 @@ use std::{
 pub mod builtinfunction;
 
 use crate::{
-    ast::statement::{self, DynStmt, FunctionDelc, Stmt},
-    interpreter::environment::Environment,
+    ast::statement::{self, DynStmt, FunctionDelc, RcStmt, Stmt},
+    interpreter::environment::{Environment, Scope},
     token::Token,
 };
 //#[derive(Debug,Clone)]
@@ -79,11 +79,22 @@ impl Display for Values<'_> {
 pub struct LoxFunction<'a> {
     name: Token<'a>,
     paren: Box<[Token<'a>]>,
-    body: DynStmt<'a>,
+    body: RcStmt<'a>,
+    scope: Scope<'a>,
 }
 impl<'a> LoxFunction<'a> {
-    pub fn new(name: Token<'a>, paren: Box<[Token<'a>]>, body: DynStmt<'a>) -> Self {
-        Self { name, paren, body }
+    pub fn new(
+        name: Token<'a>,
+        paren: Box<[Token<'a>]>,
+        body: RcStmt<'a>,
+        scope: Scope<'a>,
+    ) -> Self {
+        Self {
+            name,
+            paren,
+            body,
+            scope,
+        }
     }
 
     fn set_arguments(&self, env: &mut Environment<'a>, args: &[Values<'a>]) {
@@ -102,10 +113,15 @@ impl<'a> LoxCallable<'a> for LoxFunction<'a> {
         env: &mut Environment<'a>,
         args: &[Values<'a>],
     ) -> Result<Values<'a>, Box<dyn Error>> {
+        let global_scope=env.get_current();
+        env.set_scope(self.scope.clone());//Setting the pointer inside the function.So the variable
+                                          //inside the function became avaliable.
         env.create_sub_values();
         self.set_arguments(env, args);
         let return_value = self.body.execute(env)?;
         env.delete_sub_values();
+        env.set_scope(global_scope);//Returning from the function.Placing the pointer in hte gloabl
+                                    //position.
         if let Some(return_value) = return_value {
             return Ok(return_value);
         }

@@ -57,46 +57,40 @@ impl<'a> Scope<'a> {
     pub fn contain(&self, key: &str) -> bool {
         self.get(key).is_some()
     }
-    fn to_environment(self, write: &'a mut dyn Write) -> Environment<'a> {
-        Environment {
-            values: self,
-            stdout: write,
-        }
-    }
 }
 pub struct Environment<'a> {
-    values: Scope<'a>,
+    scope: Scope<'a>,
     stdout: &'a mut dyn Write,
 }
 impl Debug for Environment<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Environment{{values:{:?}}}", self.values)
+        write!(f, "Environment{{values:{:?}}}", self.scope)
     }
 }
 impl<'a> Environment<'a> {
     pub fn global_env(stdout: &'a mut dyn Write) -> Self {
         let mut output = Self {
-            values: Scope::default(),
+            scope: Scope::default(),
             stdout,
         };
         output.include_globals();
         output
     }
     pub fn create_sub_values(&mut self) {
-        self.values.create_sub_values();
+        self.scope.create_sub_values();
     }
     pub fn delete_sub_values(&mut self) {
-        self.values.delete_sub_values();
+        self.scope.delete_sub_values();
     }
 
     pub fn define(&mut self, name: String, value: Values<'a>) {
-        self.values.define(name, value);
+        self.scope.define(name, value);
     }
     pub fn redefine(&mut self, name: &str, value: Values<'a>) -> Result<(), String> {
-        self.values.redefine(name, value)
+        self.scope.redefine(name, value)
     }
     pub fn get_current(&self) -> Scope<'a> {
-        self.values.clone()
+        self.scope.clone()
     }
     pub fn write(&mut self, output: &str) -> Result<(), std::io::Error> {
         self.stdout.write_all(output.as_bytes())?;
@@ -116,6 +110,10 @@ impl<'a> Environment<'a> {
     }
 
     pub fn get(&self, key: &str) -> Option<Values<'a>> {
-        self.values.get(key)
+        self.scope.get(key)
+    }
+
+    pub fn set_scope(&mut self, values: Scope<'a>) {
+        self.scope = values;
     }
 }

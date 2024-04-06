@@ -13,7 +13,10 @@
 ///logic_or → logic_and ( "or" logic_and )* ;
 ///logic_and → equality ( "and" equality )* ;
 use crate::{
-    ast::expression::Expr, interpreter::environment::Environment, lox_object::{LoxFunction, Values}, token::Token,
+    ast::expression::Expr,
+    interpreter::environment::Environment,
+    lox_object::{LoxFunction, Values},
+    token::Token,
 };
 use std::{error::Error, fmt::Debug, rc::Rc};
 
@@ -25,18 +28,24 @@ pub struct If<'a> {
     else_b: Option<DynStmt<'a>>,
 }
 #[derive(Debug)]
-pub struct FunctionDelc<'a>{
-    function:Rc<LoxFunction<'a>>,
+pub struct FunctionDelc<'a> {
+    name: Token<'a>,
+    paran: Box<[Token<'a>]>,
+    body: RcStmt<'a>,
 }
-impl<'a> From<LoxFunction<'a>> for FunctionDelc<'a>{
-    fn from(value: LoxFunction<'a>) -> Self {
-        FunctionDelc{function:Rc::new(value)}
+
+impl<'a> FunctionDelc<'a> {
+    pub fn new(name: Token<'a>, paran: Box<[Token<'a>]>, body: DynStmt<'a>) -> Self {
+        Self { name, paran, body:body.into() }
     }
 }
-impl<'a> Stmt<'a> for FunctionDelc<'a>{
-    fn execute(& self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
-        env.define(self.function.name().to_string(),Values::Fn(self.function.clone()));
+impl<'a> Stmt<'a> for FunctionDelc<'a> {
+    fn execute(&self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
+        let func = LoxFunction::new(self.name, self.paran.clone(), self.body.clone(), env.get_current());
+        env.define(self.name.to_string(), Values::Fn(Rc::new(func)));
         Ok(None)
+        //env.define(self.function.name().to_string(),Values::Fn(self.function.clone()));
+        //Ok(None)
     }
 }
 impl<'a> If<'a> {
@@ -49,17 +58,17 @@ impl<'a> If<'a> {
     }
 }
 #[derive(Debug)]
-pub struct ReturnStmt<'a>{
-    expr:DynExpr<'a>
+pub struct ReturnStmt<'a> {
+    expr: DynExpr<'a>,
 }
-impl<'a> From<DynExpr<'a>> for ReturnStmt<'a>{
+impl<'a> From<DynExpr<'a>> for ReturnStmt<'a> {
     fn from(value: DynExpr<'a>) -> Self {
-        Self{expr:value}
+        Self { expr: value }
     }
 }
-impl<'a> Stmt<'a> for ReturnStmt<'a>{
-    fn execute(& self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
-        let value=self.expr.evaluate_to_val(env)?;
+impl<'a> Stmt<'a> for ReturnStmt<'a> {
+    fn execute(&self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
+        let value = self.expr.evaluate_to_val(env)?;
         return Ok(Some(value));
     }
 }
@@ -102,8 +111,9 @@ impl<'a> WhileStmt<'a> {
     }
 }
 pub type DynStmt<'a> = Box<dyn Stmt<'a> + 'a>;
+pub type RcStmt<'a> = Rc<dyn Stmt<'a> + 'a>;
 pub trait Stmt<'a>: Debug {
-    fn execute(& self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>>;
+    fn execute(&self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>>;
 }
 #[derive(Debug, Default)]
 pub struct Block<'a> {
@@ -132,7 +142,7 @@ impl<'a> From<Box<[DynStmt<'a>]>> for Block<'a> {
     }
 }
 impl<'a> Stmt<'a> for Statements<'a> {
-    fn execute(& self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
+    fn execute(&self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
         for x in self.source.iter() {
             if let Some(x) = x.execute(env)? {
                 return Ok(Some(x));
@@ -164,7 +174,7 @@ impl<'a> From<Vec<DynStmt<'a>>> for Block<'a> {
 //    }
 //}
 impl<'a> Stmt<'a> for Block<'a> {
-    fn execute(& self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
+    fn execute(&self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
         env.create_sub_values();
         for x in self.source.iter() {
             if let Some(x) = x.execute(env)? {
@@ -191,7 +201,7 @@ impl<'a> Var<'a> {
 }
 
 impl<'a> Stmt<'a> for Var<'a> {
-    fn execute(& self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
+    fn execute(&self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
         let val = self.initializer.evaluate_to_val(env)?;
         env.define(self.name.to_string(), val);
         Ok(None)
@@ -213,10 +223,7 @@ impl<'a> Expression<'a> {
 //    }
 //}
 impl<'a> Stmt<'a> for Expression<'a> {
-    fn execute(
-        & self,
-        env: &mut Environment<'a>,
-    ) -> Result<Option<Values<'a>>, Box<dyn Error>> {
+    fn execute(&self, env: &mut Environment<'a>) -> Result<Option<Values<'a>>, Box<dyn Error>> {
         self.expression.evaluate_to_val(env)?;
         Ok(None)
     }

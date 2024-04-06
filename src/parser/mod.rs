@@ -492,7 +492,7 @@ impl<'a, 'b: 'a> Parser<'a, 'b> {
         self.consume(TokenType::RightParen, ParserErrorType::MissingRightParen);
         self.consume(TokenType::LeftBrace, ParserErrorType::MissingLeftBrace);
         let body = self.block_statement();
-        return Box::new(FunctionDelc::from(LoxFunction::new(name, parameter, body)));
+        return Box::new(FunctionDelc::new(name, parameter, body));
     }
 
     fn return_statement(&mut self) -> DynStmt<'b> {
