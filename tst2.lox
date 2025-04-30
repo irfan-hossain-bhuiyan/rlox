@@ -1,8 +1,10 @@
+
+
 fun fibbonaci(n){
 	if(n==0 or n==1){return n;}
 	else{return fibbonaci(n-1)+fibbonaci(n-2);}
 }
 var start=clock();
-print("fibbonaci is",fibbonaci(40));
+print("fibbonaci is",fibbonaci(20));
 var end=clock();
 print("time spent",end-start,"seconds");
